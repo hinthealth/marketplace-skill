@@ -131,6 +131,15 @@ const APP_CONFIG = {
 
 // ============================================================
 // Session store (in-memory)
+//
+// NOTE: This template stores sessions + practice access tokens in memory
+// for demo simplicity. Every revision deploy is a fresh process and wipes
+// this object — that's fine for kicking the tires, fatal for any real app.
+//
+// For anything beyond a demo, persist to the Postgres database that Hint
+// auto-provisions alongside this service. The connection string is
+// available at `process.env.DATABASE_URL`. Add `pg` (already in the
+// dependencies) and write the sessions table on boot.
 // ============================================================
 const sessions = {};
 
@@ -236,7 +245,17 @@ const server = http.createServer(async (req, res) => {
     return res.end(renderClinicalInteraction(sessionKey, session));
   }
 
-  // Headless connect — Hint POSTs auth code during installation
+  // Headless connect — Hint POSTs auth code during installation.
+  //
+  // The response body's `access_token` is the practice-scoped key the app
+  // uses to call `/api/provider/*` endpoints. It is NOT the same as the
+  // partner API key in HINT_API_KEY (which is partner-wide).
+  //
+  // Persist `{ partner_id, practice_id, access_token }` keyed by practice
+  // so the embedded UI can authenticate Provider API calls on every render.
+  // The example below just logs it — replace with a real write to your
+  // session/practice store (use the auto-provisioned Postgres at
+  // `process.env.DATABASE_URL` for anything beyond a demo).
   if (req.method === 'POST' && url.pathname.startsWith('/hint/connect/')) {
     const authCode = url.pathname.replace('/hint/connect/', '');
     console.log('Headless connect, auth code: ' + authCode);
@@ -246,6 +265,8 @@ const server = http.createServer(async (req, res) => {
           code: authCode,
           grant_type: 'authorization_code',
         });
+        // TODO: persist resp.body.access_token + practice_id to DATABASE_URL
+        // so the embedded surface can use it to call /api/provider/*.
         console.log('Token exchange:', resp.status, JSON.stringify(resp.body));
       }
     } catch (err) {
@@ -482,6 +503,13 @@ The access token from handshake/connect gives the app access to practice data. K
 
 All require `Authorization: Bearer <access_token>` (the practice-scoped token from handshake, NOT the partner API key).
 
+**Response shape gotchas — read these before writing client code:**
+
+- **List endpoints return a bare JSON array**, not `{patients: [...]}` or `{data: [...]}`. Parse with `Array.isArray(res) ? res : []` and iterate directly. Do NOT do `res.patients || res.records || []` — that silently produces an empty array.
+- **Pagination uses `limit` + `offset`** (not `page` / `page_size`). Example: `GET /api/provider/patients?limit=50&offset=100`. Max `limit` is 100. If a response returns exactly `limit` rows, paginate.
+- **Archived rows are excluded by default** on list endpoints. To list only archived rows, pass `?filter=archived`. To list both active and archived in one call, pass `?filter=all`. If the app shows "no records" and the practice expects to see some, archive state is the first thing to check.
+- **The same base URL serves sandbox and live traffic.** Use `https://api.hint.com` regardless of whether the partner API key is a `sbx-` sandbox key. Hint routes sandbox traffic transparently based on the key; there is no `api.sandbox.hint.com` host to switch to.
+
 Full API reference: https://developers.hint.com/reference
 
 ### Hint JS SDK
@@ -538,29 +566,31 @@ curl -s -X POST "$HINT_API_URL/api/partner/app/revisions" \
   -F "code_archive=@/tmp/app-deploy.zip;type=application/zip"
 ```
 
-The response contains the revision row: `{ "id": "prev-...", "status": "pending", ... }`. Save the revision id.
+The response contains the revision row: `{ "id": "prev-...", "status": "pending", ... }`. Save the revision id as `$REV_ID`.
 
-Poll the revision until `status` flips from `pending` to `pushed` (zip extracted + pushed to the platform — usually ~5s) or `failed`:
+Poll the revision until `status` flips from `pending` to `pushed` (extracted + pushed — usually ~5s) or `failed`. `GET /api/partner/app/revisions` returns a **bare JSON array**, so handle it directly:
 
 ```bash
 curl -s "$HINT_API_URL/api/partner/app/revisions" \
-  -H "Authorization: Bearer $API_KEY"
+  -H "Authorization: Bearer $API_KEY" \
+  | python3 -c "import sys,json; print(next((r['status'] for r in json.load(sys.stdin) if r['id']=='$REV_ID'),'?'))"
 ```
 
-Once status is `pushed`, get the service URL:
+Once status is `pushed`, get the service URL. The services list is also a bare array; it can contain multiple rows (e.g. an auto-provisioned Postgres alongside the web service, plus the occasional stub from a prior provision attempt). **Select the web service that has a non-null `service_url` and `status: "active"`** — don't just take the first row:
 
 ```bash
 curl -s "$HINT_API_URL/api/partner/app/services" \
-  -H "Authorization: Bearer $API_KEY"
+  -H "Authorization: Bearer $API_KEY" \
+  | python3 -c "import sys,json; print(next((s['service_url'] for s in json.load(sys.stdin) if s.get('service_url') and s.get('status')=='active'),''))"
 ```
 
-Take `service_url` from the first service in the response — save it as `$APP_URL`. Then poll the service URL directly until it returns 200 (the platform finishes its build in ~2-3 minutes for a small Node.js app):
+Save the resulting URL as `$APP_URL`. Then poll it directly until it returns 200 (the build is usually live within a few seconds of `status: pushed`):
 
 ```bash
-curl -s $APP_URL/
+curl -s -o /dev/null -w '%{http_code}' $APP_URL/
 ```
 
-Retry every 15-30 seconds for up to 5 minutes. Once the health check responds with a 200, the app is live — the service URL is the source of truth.
+Start at a **5-second interval, fall back to 10 seconds** if not live by the second poll. Cap at 5 minutes. Once the health check responds with a 200, the app is live — the service URL is the source of truth.
 
 If the revision flips to `status: failed`, the platform refused the deploy (typical reasons: partner not yet approved for production deploys; partner product type is not `app`; push failure). Contact Hint support (devsupport@hint.com) with the revision id.
 
