@@ -562,7 +562,7 @@ curl -s $APP_URL/
 
 Retry every 15-30 seconds for up to 5 minutes. Once the health check responds with a 200, the app is live — the service URL is the source of truth.
 
-If the revision flips to `status: failed`, the platform refused the deploy (typical reasons: partner not yet approved for production deploys; partner product type is not `app`; push failure). Contact Hint support (support@hint.com) with the revision id.
+If the revision flips to `status: failed`, the platform refused the deploy (typical reasons: partner not yet approved for production deploys; partner product type is not `app`; push failure). Contact Hint support (devsupport@hint.com) with the revision id.
 
 Save the live URL as `$APP_URL` and skip past Self-Hosted Mode to **Step 6: Configure Marketplace Settings**.
 
@@ -700,7 +700,7 @@ Env var changes hit the deployed service immediately. Build/start command change
 
 ## Troubleshooting
 
-- **(Hosted) Revision flips to `status: failed` immediately** — Contact Hint support (support@hint.com) with the revision id. Common causes: partner is not approved for non-sandbox deploys yet, the partner has no eligible API key, or the partner's product type is not `app`.
+- **(Hosted) Revision flips to `status: failed` immediately** — Contact Hint support (devsupport@hint.com) with the revision id. Common causes: partner is not approved for non-sandbox deploys yet, the partner has no eligible API key, or the partner's product type is not `app`.
 - **(Hosted) Revision stays at `status: pushed` but `$APP_URL` never serves the new code** — The platform's build is in progress (typically 2-3 min). If it stays stuck past 10 min, contact Hint support with the revision's `commit_sha`.
 - **(Self-hosted) `$APP_URL` returns the wrong content / 404 on /hint/handshake** — The partner's app isn't actually serving the marketplace routes at the URL they gave. Have them double-check their deployment, then re-run the smoke-test curls from Self-Hosted Step 4.
 - **"Product type must be app"** — The partner's product type must be `app`. Update it in the Partner Portal.

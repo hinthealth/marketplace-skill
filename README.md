@@ -43,4 +43,4 @@ Skill version lives in the file's frontmatter. Bumps follow semver — major bum
 
 ## Issues
 
-File issues against this repository for skill bugs or unclear instructions. For platform / API issues, contact [support@hint.com](mailto:support@hint.com).
+File issues against this repository for skill bugs or unclear instructions. For platform / API issues, contact [devsupport@hint.com](mailto:devsupport@hint.com).
