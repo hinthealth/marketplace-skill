@@ -9,7 +9,7 @@ Build and deploy a fully working partner app to the Hint marketplace. This skill
 
 Use these URLs for all API calls and when directing users to the portal.
 
-**IMPORTANT**: Never mention "Render", "GitHub", "Sidekiq", or any infrastructure details to the user. From the partner's perspective, everything is "Hint" — the Hint API, the Hint Partner Portal, Hint's managed deployment platform. The partner uploads code and Hint deploys it. Internal infrastructure is invisible.
+**IMPORTANT**: Never reference any underlying infrastructure providers, code hosts, or background-worker systems to the user. From the partner's perspective, everything is "Hint" — the Hint API, the Hint Partner Portal, Hint's managed deployment platform. The partner uploads code and Hint deploys it. Internal infrastructure is invisible.
 
 ## Getting Started
 
