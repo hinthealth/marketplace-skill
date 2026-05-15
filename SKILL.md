@@ -13,7 +13,7 @@ Use these URLs for all API calls and when directing users to the portal.
 
 ## Getting Started
 
-Ask the user two things:
+Ask the user three things:
 
 1. **What does your app do?** Get a description of the app they want to build. Examples:
    - "A patient messaging tool that lets practitioners send secure messages"
@@ -23,6 +23,12 @@ Ask the user two things:
 2. **What type of surface?** How should the app appear in Hint:
    - **Core Page** (`core_page`) — a full-page app accessible from the sidebar. Best for dashboards, tools, and standalone features.
    - **Clinical Interaction** (`clinical_interaction`) — appears within clinical workflows, in the context of a specific patient/interaction. Best for clinical tools, lab viewers, and patient-specific features. Receives patient context via `HintSDK.currentPatient` and `HintSDK.interaction`.
+
+3. **How do you want to host it?**
+   - **Hosted** — Hint generates the app and runs it on Hint-managed infrastructure. Easiest path; you write nothing yourself. Pick this unless you have a specific reason not to.
+   - **Self-hosted** — You already have (or will deploy) the app on your own infrastructure (Vercel, your AWS account, a VM, wherever). The skill only registers your URLs with Hint and confirms the marketplace contract.
+
+The mode the user picks determines which path the skill follows after the shared setup. Hold onto the answer — you'll branch on it after Step 2.
 
 Then ask if they already have a **sandbox partner API key** (starts with `sbx-`). If not, walk them through creating one:
 
@@ -63,6 +69,19 @@ curl -s -X POST "$HINT_API_URL/api/partner/app" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json"
 ```
+
+---
+
+**Branch on the mode the user picked in Getting Started:**
+
+- **Hosted** → continue with Steps 3-5 in **Hosted Mode** below, then run the shared **Step 6: Configure Marketplace Settings**.
+- **Self-hosted** → jump to **Self-Hosted Mode** (right after the Hosted Mode steps), then run the shared **Step 6: Configure Marketplace Settings**.
+
+---
+
+# Hosted Mode
+
+The skill generates a Node.js app from a template, packages it, and uploads it to Hint's managed deployment platform. Skip this entire section if the user picked self-hosted.
 
 ## Step 3: Build the Node.js App
 
@@ -535,64 +554,108 @@ curl -s "$HINT_API_URL/api/partner/app/services" \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-Take `service_url` from the first service in the response — save it as `$SERVICE_URL`. Then poll the service URL directly until it returns 200 (the platform finishes its build in ~2-3 minutes for a small Node.js app):
+Take `service_url` from the first service in the response — save it as `$APP_URL`. Then poll the service URL directly until it returns 200 (the platform finishes its build in ~2-3 minutes for a small Node.js app):
 
 ```bash
-curl -s $SERVICE_URL/
+curl -s $APP_URL/
 ```
 
 Retry every 15-30 seconds for up to 5 minutes. Once the health check responds with a 200, the app is live — the service URL is the source of truth.
 
 If the revision flips to `status: failed`, the platform refused the deploy (typical reasons: partner not yet approved for production deploys; partner product type is not `app`; push failure). Contact Hint support (support@hint.com) with the revision id.
 
+Save the live URL as `$APP_URL` and skip past Self-Hosted Mode to **Step 6: Configure Marketplace Settings**.
+
+---
+
+# Self-Hosted Mode
+
+The partner runs the app on their own infrastructure. The skill doesn't build, package, or deploy code — it confirms the marketplace contract is in place and registers the partner's existing URLs with Hint. Skip this entire section if the user picked hosted.
+
+## Step 3: Confirm the Marketplace Contract
+
+The partner's deployed app must already implement (or be willing to implement) three routes. Ask the partner to confirm each is in place, or offer to walk them through what each one needs to do:
+
+| Route | What it does |
+|---|---|
+| `POST /hint/handshake` | Receives a signed payload from Hint at install/embed time. The app verifies the `X-Hint-Signature` header (HMAC-SHA256 of the request body, key = the partner's webhook secret), mints a session key, and returns it. |
+| `POST /hint/connect/:code` | Receives an OAuth code from Hint after a practice installs. The app exchanges the code at `POST $HINT_API_URL/api/oauth/tokens` for a practice-scoped API token and persists it. |
+| `GET /hint/<anchor_type>?session_key=...` | Renders the embedded UI for that surface. Looks up the session by `session_key` and the practice context that was set up during handshake. |
+
+The partner's app also needs to know two pieces of environment config Hint provides at install time:
+
+- `HINT_API_URL` — the base URL of the Hint API. The partner should hardcode it to `https://api.hint.com` (production) or whatever sandbox/staging URL Hint gave them.
+- `HINT_WEBHOOK_SECRET` — used to verify the `X-Hint-Signature` header on every `POST /hint/handshake`. The partner finds this in the Partner Portal under **API Keys → Webhooks Signature Key**.
+
+If the partner's app is missing one of those routes, point them at the **Hosted Mode** server.js template above as a reference implementation — they can copy the handshake-verification + OAuth-exchange code straight across. They don't have to use Node.js; they just need an HTTP server that implements the three routes.
+
+## Step 4: Gather the Partner's Deployed URL
+
+Ask the partner: **what's the base URL where your app is deployed?** Examples: `https://patient-portal.acme.com`, `https://acme-marketplace.vercel.app`, `https://10.0.0.4:8080`.
+
+Validate by hitting the partner's URL — if any of these returns something other than 200/2xx, the URLs don't match what's deployed:
+
+```bash
+curl -sS -o /dev/null -w "GET /  → HTTP %{http_code}\n" "$APP_URL/"
+curl -sS -o /dev/null -w "POST /hint/handshake (unsigned, expect 401) → HTTP %{http_code}\n" -X POST "$APP_URL/hint/handshake"
+curl -sS -o /dev/null -w "GET  /hint/<anchor_type> (no session, expect 200/401) → HTTP %{http_code}\n" "$APP_URL/hint/<anchor_type>"
+```
+
+A 401 on `/hint/handshake` is the correct response to an unsigned request — that confirms signature verification is wired up. A 200 or 404 there is a red flag.
+
+Hold `$APP_URL` — the next step uses it.
+
+---
+
 ## Step 6: Configure Marketplace Settings
 
-Once the service URL is known, configure the partner for automatic activation and embedding:
+Once `$APP_URL` is known (Hint-provisioned in Hosted Mode, partner-supplied in Self-Hosted Mode), configure the partner for automatic activation and embedding:
 
 ```bash
 # Set auth type and redirect URL for automatic headless activation
 curl -s -X PATCH "$HINT_API_URL/api/partner/partner" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"partner\": {\"auth_type\": \"automatic_headless\", \"redirect_url\": \"$SERVICE_URL/hint/connect/\"}}"
+  -d "{\"partner\": {\"auth_type\": \"automatic_headless\", \"redirect_url\": \"$APP_URL/hint/connect/\"}}"
 
 # Set handshake URL
 curl -s -X PATCH "$HINT_API_URL/api/partner/app" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"app\": {\"handshake_url\": \"$SERVICE_URL/hint/handshake\"}}"
+  -d "{\"app\": {\"handshake_url\": \"$APP_URL/hint/handshake\"}}"
 
 # Create anchor — use the surface type chosen by the user
 # For core_page:
 curl -s -X POST "$HINT_API_URL/api/partner/app/anchors" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"anchor\": {\"type\": \"core_page\", \"source_url\": \"$SERVICE_URL/hint/core_page\"}}"
+  -d "{\"anchor\": {\"type\": \"core_page\", \"source_url\": \"$APP_URL/hint/core_page\"}}"
 
 # For clinical_interaction:
 curl -s -X POST "$HINT_API_URL/api/partner/app/anchors" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"anchor\": {\"type\": \"clinical_interaction\", \"source_url\": \"$SERVICE_URL/hint/clinical_interaction\"}}"
+  -d "{\"anchor\": {\"type\": \"clinical_interaction\", \"source_url\": \"$APP_URL/hint/clinical_interaction\"}}"
 ```
 
 ## Step 7: Verify & Report
 
 Test the health check:
 ```bash
-curl -s $SERVICE_URL/
+curl -s $APP_URL/
 ```
 
 Print a summary:
 ```
-Hint Marketplace App Deployed!
+Hint Marketplace App Set Up!
 
   App:         <description of what was built>
   Partner:     <partner_name>
-  Service URL: <service_url>
+  App URL:     <$APP_URL>
+  Hosting:     <Hosted by Hint  or  Self-hosted by partner>
   Surface:     <core_page or clinical_interaction>
 
-  Routes:
+  Routes (live on $APP_URL):
     GET  /                              — Health check
     POST /hint/handshake                — Hint handshake (verified, session creation)
     GET  /hint/<surface_type>           — Embedded UI (iframe)
@@ -613,7 +676,7 @@ Hint Marketplace App Deployed!
 
 ## Deploying Updates
 
-To update the app after making changes:
+**Hosted Mode** — re-run the deploy:
 ```bash
 cd <app_dir> && zip -r /tmp/app-deploy.zip .
 curl -s -X POST "$HINT_API_URL/api/partner/app/revisions" \
@@ -621,7 +684,7 @@ curl -s -X POST "$HINT_API_URL/api/partner/app/revisions" \
   -F "code_archive=@/tmp/app-deploy.zip;type=application/zip"
 ```
 
-Poll the revision list (`GET /api/partner/app/revisions`) until the new revision flips to `pushed`, then poll the service URL for a 200.
+Poll the revision list (`GET /api/partner/app/revisions`) until the new revision flips to `pushed`, then poll `$APP_URL/` for a 200.
 
 To change config (env vars, build/start command) on an existing service:
 ```bash
@@ -633,12 +696,15 @@ curl -s -X PATCH "$HINT_API_URL/api/partner/app/services/$SERVICE_ID" \
 
 Env var changes hit the deployed service immediately. Build/start command changes apply on the next revision push.
 
+**Self-Hosted Mode** — the partner deploys to their own infrastructure however they normally do; nothing changes on Hint's side. If the partner moves the app to a new URL, re-run the URL-registration calls from Step 6 with the updated `$APP_URL`.
+
 ## Troubleshooting
 
-- **Revision flips to `status: failed` immediately** — Contact Hint support (support@hint.com) with the revision id. Common causes: partner is not approved for non-sandbox deploys yet, the partner has no eligible API key, or the partner's product type is not `app`.
-- **Revision stays at `status: pushed` but the service URL never serves the new code** — The platform's build is in progress (typically 2-3 min). If it stays stuck past 10 min, contact Hint support with the revision's `commit_sha`.
-- **"Product type must be app"** — The partner's product type must be `app`. Update it in the Partner Portal
-- **403 on Partner API** — The API key may not have the right permissions
-- **Handshake fails with 401** — The webhook secret may not be configured correctly on the deployed service
-- **Headless connect fails** — The API URL env var may not point to the correct Hint API instance
-- **Embedded page doesn't load** — Verify the anchor exists and the `source_url` matches the deployed service URL + the correct route for the surface type
+- **(Hosted) Revision flips to `status: failed` immediately** — Contact Hint support (support@hint.com) with the revision id. Common causes: partner is not approved for non-sandbox deploys yet, the partner has no eligible API key, or the partner's product type is not `app`.
+- **(Hosted) Revision stays at `status: pushed` but `$APP_URL` never serves the new code** — The platform's build is in progress (typically 2-3 min). If it stays stuck past 10 min, contact Hint support with the revision's `commit_sha`.
+- **(Self-hosted) `$APP_URL` returns the wrong content / 404 on /hint/handshake** — The partner's app isn't actually serving the marketplace routes at the URL they gave. Have them double-check their deployment, then re-run the smoke-test curls from Self-Hosted Step 4.
+- **"Product type must be app"** — The partner's product type must be `app`. Update it in the Partner Portal.
+- **403 on Partner API** — The API key may not have the right permissions.
+- **Handshake fails with 401** — The webhook secret may not be configured correctly on the deployed service. The partner finds it in the Partner Portal under API Keys → Webhooks Signature Key.
+- **Headless connect fails** — The API URL env var may not point to the correct Hint API instance.
+- **Embedded page doesn't load** — Verify the anchor exists and the `source_url` matches `$APP_URL` + the correct route for the surface type.
