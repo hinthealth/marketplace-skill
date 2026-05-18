@@ -4,10 +4,11 @@ Build and deploy a fully working partner app to the Hint marketplace. This skill
 
 ## Platform URLs
 
-- **Hint API**: `https://api.hint.com`
-- **Partner Portal**: `https://app.hint.com`
+- **Hint API (sandbox)**: `https://api.sandbox.hint.com` — for sandbox testing. Use this whenever the partner API key starts with `sbx-`.
+- **Hint API (live)**: `https://api.hint.com` — for live partners after the app is approved + promoted. Use this with API keys that have no `sbx-` prefix.
+- **Partner Portal**: `https://app.hint.com` — single portal for both sandbox and live; partners switch between sandbox/live workspaces inside it.
 
-Use these URLs for all API calls and when directing users to the portal.
+**Rule:** set `$HINT_API_URL` based on the API key the partner gives you — sandbox key → sandbox API host, live key → live API host. Mixing them (sandbox key against live host, or vice versa) returns 401. The same rule applies to the `HINT_API_URL` env var on the deployed service: sandbox-deployed apps point at the sandbox host, live-deployed apps at the live host (Hint sets this automatically in Hosted Mode).
 
 **IMPORTANT**: Never reference any underlying infrastructure providers, code hosts, or background-worker systems to the user. From the partner's perspective, everything is "Hint" — the Hint API, the Hint Partner Portal, Hint's managed deployment platform. The partner uploads code and Hint deploys it. Internal infrastructure is invisible.
 
@@ -330,7 +331,7 @@ function renderCorePage(sessionKey, session) {
       <!-- APP UI GOES HERE -->
     </div>
   </div>
-  <script src="https://api.hint.com/hint-sdk.js"></script>
+  <script src="${HINT_API_URL}/hint-sdk.js"></script>
   <script>
     const SESSION_KEY = '${sessionKey || ''}';
     if (typeof HintSDK !== 'undefined') {
@@ -374,7 +375,7 @@ function renderClinicalInteraction(sessionKey, session) {
       ${session ? '<p>User: ' + (session.user?.email || 'Unknown') + ' | Practice: ' + (session.practice?.name || 'Unknown') + '</p>' : ''}
     </div>
   </div>
-  <script src="https://api.hint.com/hint-sdk.js"></script>
+  <script src="${HINT_API_URL}/hint-sdk.js"></script>
   <script>
     const SESSION_KEY = '${sessionKey || ''}';
     function updatePatient(patient) {
@@ -424,7 +425,7 @@ function renderSettings(sessionKey, session) {
   <div class="info">
     ${session ? '<p>Practice: ' + (session.practice?.name || 'Unknown') + '</p>' : ''}
   </div>
-  <script src="https://api.hint.com/hint-sdk.js"></script>
+  <script src="${HINT_API_URL}/hint-sdk.js"></script>
 </body>
 </html>`;
 }
@@ -557,7 +558,7 @@ All require `Authorization: Bearer <access_token>` (the practice-scoped token fr
 - **List endpoints return a bare JSON array**, not `{patients: [...]}` or `{data: [...]}`. Parse with `Array.isArray(res) ? res : []` and iterate directly. Do NOT do `res.patients || res.records || []` — that silently produces an empty array.
 - **Pagination uses `limit` + `offset`** (not `page` / `page_size`). Example: `GET /api/provider/patients?limit=50&offset=100`. Max `limit` is 100. If a response returns exactly `limit` rows, paginate.
 - **Archived rows are excluded by default** on list endpoints. To list only archived rows, pass `?filter=archived`. To list both active and archived in one call, pass `?filter=all`. If the app shows "no records" and the practice expects to see some, archive state is the first thing to check.
-- **The same base URL serves sandbox and live traffic.** Use `https://api.hint.com` regardless of whether the partner API key is a `sbx-` sandbox key. Hint routes sandbox traffic transparently based on the key; there is no `api.sandbox.hint.com` host to switch to.
+- **Sandbox vs live is host-level, not key-level.** Sandbox traffic goes to `https://api.sandbox.hint.com`, live traffic goes to `https://api.hint.com`. Sandbox API keys (prefix `sbx-`) only work against the sandbox host; live keys only work against the live host. Pick the host based on the API key the practice's app is configured with — they're not interchangeable.
 
 Full API reference: https://developers.hint.com/reference
 
@@ -566,7 +567,8 @@ Full API reference: https://developers.hint.com/reference
 Available in the embedded iframe:
 
 ```html
-<script src="https://api.hint.com/hint-sdk.js"></script>
+<!-- Use $HINT_API_URL (api.sandbox.hint.com for sandbox, api.hint.com for live) -->
+<script src="$HINT_API_URL/hint-sdk.js"></script>
 <script>
   HintSDK.init(() => {
     console.log('User:', HintSDK.user);           // { id, name, email, partner_roles }
@@ -663,7 +665,7 @@ The partner's deployed app must already implement (or be willing to implement) t
 
 The partner's app also needs to know two pieces of environment config Hint provides at install time:
 
-- `HINT_API_URL` — the base URL of the Hint API. The partner should hardcode it to `https://api.hint.com` (production) or whatever sandbox/staging URL Hint gave them.
+- `HINT_API_URL` — the base URL of the Hint API. Set to `https://api.sandbox.hint.com` while testing with a sandbox API key (`sbx-...`), and `https://api.hint.com` once promoted to live. The two hosts are not interchangeable.
 - `HINT_WEBHOOK_SECRET` — used to verify the `X-Hint-Signature` header on every `POST /hint/handshake`. The partner finds this in the Partner Portal under **API Keys → Webhooks Signature Key**.
 
 If the partner's app is missing one of those routes, point them at the **Hosted Mode** server.js template above as a reference implementation — they can copy the handshake-verification + OAuth-exchange code straight across. They don't have to use Node.js; they just need an HTTP server that implements the three routes.
