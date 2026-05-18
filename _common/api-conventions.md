@@ -1,13 +1,14 @@
 # Hint API Conventions (shared fragment)
 
-This file is referenced by multiple skills in this repo. It documents the cross-cutting conventions every Hint marketplace integration needs to follow, so individual skills don't repeat them.
+The single source of truth for hosts, auth, response shapes, pagination, filtering, and reserved env vars. Other files in this repo link here instead of repeating these rules.
 
 ## Hosts
 
 - **Hint API**: `https://api.hint.com` — works with both sandbox (`sbx-` prefix) and live API keys. The key determines the environment, not the host.
-- **Hint API (sandbox-only alias)**: `https://api.sandbox.hint.com` — listed in the official docs; accepts sandbox keys and returns identical data to `api.hint.com`. Use `api.hint.com` everywhere for simplicity so the partner doesn't have to swap hosts when promoting from sandbox to live.
-- **Hint API (staging)**: `https://api.staging.hint.com` — Hint-internal pre-production environment. Partners don't generally hit this directly.
+- **Hint API (sandbox alias)**: `https://api.sandbox.hint.com` — also exists and returns identical data for sandbox keys. No practical reason to switch; `api.hint.com` works for both so the partner doesn't have to swap hosts when promoting from sandbox to live.
 - **Partner Portal**: `https://app.hint.com` — single portal for both sandbox and live; partners switch between workspaces inside it.
+
+**Rule:** set `$HINT_API_URL=https://api.hint.com` for both sandbox and live work. The `sbx-` prefix on the API key picks the environment; the host stays the same.
 
 ## Authentication
 
@@ -38,6 +39,16 @@ GET /api/provider/patients?limit=50&offset=100
 
 Max `limit` is 100. If a response returns exactly `limit` rows, there are likely more — paginate by incrementing `offset`.
 
+## Date filters
+
+Timestamp fields accept bracketed operators:
+
+```
+GET /api/provider/customer_invoices?created_at[gte]=2026-01-01&created_at[lte]=2026-12-31
+```
+
+Each timestamp field (`created_at`, `updated_at`, `paid_at`, etc.) accepts `[gte]`, `[gt]`, `[lte]`, `[lt]`, `[eq]`. This is the most common filter idiom after pagination.
+
 ## Archived rows are excluded by default
 
 List endpoints filter out archived records by default. Inverse queries:
@@ -49,12 +60,12 @@ If a partner app shows "no records" and the practice expects to see some, archiv
 
 ## Reserved env vars
 
-These are managed by Hint and set automatically on every deploy. Partner-supplied values for these keys are ignored:
+Hint sets these automatically on every Hosted-Mode deploy. Self-Hosted Mode apps set them themselves. Partner-supplied values for these keys are ignored on Hosted Mode.
 
-| Var | Value |
+| Var | Purpose |
 |---|---|
-| `HINT_API_URL` | Sandbox or live host depending on the partner |
-| `HINT_API_KEY` | Partner API key |
-| `HINT_PARTNER_ID` | Stable partner ident (e.g. `ptr-...` / `sbx-ptr-...`) |
-| `HINT_WEBHOOK_SECRET` | Used to verify HMAC signatures on `/hint/handshake` payloads |
-| `DATABASE_URL` | Postgres connection string (only present when the auto-provisioned sibling database is connectable) |
+| `HINT_API_URL` | Base URL of the Hint API. Use `https://api.hint.com` for both sandbox and live. |
+| `HINT_API_KEY` | Partner-wide API key for `/api/partner/*` calls. NOT used for `/api/provider/*` (those need the practice-scoped access token from `/hint/connect/:code`). |
+| `HINT_PARTNER_ID` | Stable partner ident (e.g. `ptr-...` / `sbx-ptr-...`). Useful for log scoping. |
+| `HINT_WEBHOOK_SECRET` | Used to verify the `X-Hint-Signature` header on `POST /hint/handshake`. The partner finds this in the Partner Portal under **API Keys → Webhooks Signature Key**. |
+| `DATABASE_URL` | Postgres connection string (only present when the auto-provisioned sibling database is connectable). |

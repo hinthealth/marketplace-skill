@@ -20,10 +20,7 @@ Fetch and read these before running anything — the audit checks are derived fr
 
 ## Platform URLs
 
-- **Hint API**: `https://api.hint.com` — accepts both sandbox (`sbx-`) and live keys; the key determines the environment.
-- **Partner Portal**: `https://app.hint.com`
-
-Set `$HINT_API_URL=https://api.hint.com` for both sandbox and live work; the API key prefix determines the environment.
+Set `$HINT_API_URL=https://api.hint.com` for both sandbox and live work (Partner Portal at `https://app.hint.com`). Full conventions: [`_common/api-conventions.md`](../_common/api-conventions.md).
 
 ## Step 1: Gather Inputs
 
@@ -114,7 +111,7 @@ curl -sS -o /dev/null -w "%{http_code}" -X POST "$APP_URL/hint/handshake" \
   -d "$BODY"
 ```
 
-PASS: 401. FAIL: 200 (signature verification is wired up but the comparison is broken — usually string equality on the hex digest).
+PASS: 401. FAIL: 200 (the handler is accepting the header's presence rather than verifying its value — a real HMAC compare against `0000…` would still reject. Look for code that short-circuits when `X-Hint-Signature` is set, or a comparator that ignores the body).
 
 ### 3.5 Handshake — valid signature accepted (only if webhook secret supplied)
 
@@ -159,11 +156,11 @@ PASS: no reserved keys in `env_vars`. FAIL: any of them present (Hint ignores th
 
 Some surfaces are sensitive to misconfiguration. For each anchor:
 
-- `core_page`: `source_url` should end in `/hint/core_page` (convention; not enforced but consistent with templates).
+- `core_page`: `source_url` should end in `/hint/core_page` (convention; not enforced).
 - `clinical_interaction`: `source_url` should end in `/hint/clinical_interaction`. Anchor's `interaction_type` field should be set if the partner expects to filter by interaction type.
 - `settings`: `source_url` should end in `/hint/settings`. Anchor's `settings_label` should be set (otherwise the tab shows the app's generic name).
 
-WARN (not FAIL): partner is free to use other paths; just flag.
+The partner is free to host the surface at any path that returns valid HTML — the convention just makes templates and audit reports easier to read. WARN (not FAIL) on deviations.
 
 ### 3.9 Service status sanity
 
@@ -175,7 +172,7 @@ For each service:
 
 ### 3.10 Cross-practice tenancy probe (CRITICAL)
 
-Static analysis can't reliably catch tenancy bugs — the only test that catches mis-scoping is exercising the app from two practices and confirming each can't read the other's data. This check requires two sandbox practices and is the most expensive in the suite (multiple round-trips) — run it last.
+Static analysis can't reliably catch tenancy bugs — the only test that catches mis-scoping is exercising the app from two practices and confirming each can't read the other's data. This check requires two sandbox practices, fresh OAuth tokens for both, and a known write endpoint on the app — the most setup-heavy check in the suite. Run it last; skip cleanly (with a logged note) if the partner can't provide the inputs.
 
 **Prerequisites:**
 - The partner has at least two sandbox practices set up (create via Partner Portal → Sandboxes if not).

@@ -23,10 +23,7 @@ If none of the sub-skills match, point the user at [devsupport@hint.com](mailto:
 
 ## Platform URLs
 
-All sub-skills assume:
-
-- **Hint API**: `https://api.hint.com` — accepts both sandbox (`sbx-` prefix) and live API keys; use this everywhere. (`https://api.sandbox.hint.com` also exists and returns identical data for sandbox keys, but there's no reason to switch hosts — the key determines the environment.)
-- **Partner Portal**: `https://app.hint.com` — single portal; partners switch between sandbox and live workspaces inside it.
+All sub-skills assume `$HINT_API_URL=https://api.hint.com` (works for both sandbox and live; the API key prefix determines the environment) and the Partner Portal at `https://app.hint.com`. Full host + auth conventions: [`_common/api-conventions.md`](./_common/api-conventions.md).
 
 **IMPORTANT**: Never reference any underlying infrastructure providers, code hosts, or background-worker systems to the user. From the partner's perspective, everything is "Hint" — the Hint API, the Hint Partner Portal, Hint's managed deployment platform. Internal infrastructure is invisible.
 

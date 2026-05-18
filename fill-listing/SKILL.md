@@ -1,5 +1,8 @@
 # /hint-marketplace-fill-listing — Populate the Marketplace Listing
 
+> ⚠️ **NOT YET FUNCTIONAL — public endpoints landing soon.**
+> The per-section endpoints this skill writes through (`PATCH /partner/product`, `POST /partner/product/highlights`, etc.) are not live on `api.hint.com` yet. Every section's Step 4 curl will 404 if you run it today. Until then, the skill is useful for the Q&A + draft-listing workflow (Steps 1–3); the partner can paste the drafted content to [devsupport@hint.com](mailto:devsupport@hint.com) to have it populated manually. The status table below tracks which endpoints are live.
+
 Guides the partner through filling in their marketplace listing — the name, tagline, overview, feature highlights, customer quotes, categories, links, icon, and screenshots that practices see when browsing the Hint marketplace.
 
 The skill is structured by **listing section**. Each section maps to its own public-API endpoint (one per concern, not one mega-PATCH) so the partner can update — or re-run — just the parts they want. The skill scrapes the partner's marketing site (with permission) and asks targeted questions to fill in what the scrape misses, then writes each section through on approval.
@@ -18,8 +21,6 @@ The skill is structured by **listing section**. Each section maps to its own pub
 | **Requirements** — prerequisites text | 📋 not yet | `PATCH /partner/product/requirements` (planned) |
 
 > Today, every section needs a Hint admin to populate it through the Partner Portal. The skill is structured against the planned public surface so adoption is zero-cost once each endpoint lands — fill in the implementation per section as `[planned]` flips to `[available]` in the table above.
->
-> Track the public-API rollout in [`partner-app-deployment.md`](https://github.com/hinthealth/hint-api) under "Follow-up PRs (planned)" — each section corresponds to a separate small PR.
 
 ## Why per-section, not one mega-PATCH
 
@@ -34,10 +35,7 @@ The skill is structured by **listing section**. Each section maps to its own pub
 
 ## Platform URLs
 
-- **Hint API**: `https://api.hint.com` — accepts both sandbox (`sbx-`) and live keys; the key determines the environment.
-- **Partner Portal**: `https://app.hint.com`
-
-Set `$HINT_API_URL=https://api.hint.com` for both sandbox and live work; the API key prefix determines the environment.
+Set `$HINT_API_URL=https://api.hint.com` for both sandbox and live work (Partner Portal at `https://app.hint.com`). Full conventions: [`_common/api-conventions.md`](../_common/api-conventions.md).
 
 ## Step 1: Gather Inputs
 
