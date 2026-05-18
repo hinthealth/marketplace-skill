@@ -1,45 +1,55 @@
 # Hint Marketplace Skill
 
-An installable AI agent skill that builds and deploys a working partner app to the [Hint](https://hint.com) marketplace.
+A bundle of installable AI agent skills for working with the [Hint](https://hint.com) marketplace.
 
 ## What this is
 
-`SKILL.md` is a self-contained natural-language playbook that any AI coding agent (Claude Code, Cursor, etc.) can load and execute. Given a description of the app you want to build, the skill drives the full marketplace flow end-to-end:
+Each `SKILL.md` in this repo is a self-contained natural-language playbook that any AI coding agent (Claude Code, Cursor, etc.) can load and execute. The root `SKILL.md` is a **router** — it asks the user what they're trying to do and points them at the matching sub-skill.
 
-- Verifies the partner account + sandbox setup
-- Generates a Node.js app that implements the Hint marketplace contract (handshake, headless connect, embedded UI surface)
-- Deploys the app to Hint-managed infrastructure via the Public API
-- Configures the partner + app + anchors for marketplace install
+## Install
 
-The output is a real, installable marketplace app — usually in under 5 minutes.
-
-## Installation
-
-Paste this into your AI coding agent of choice:
+Paste this into your AI coding agent:
 
 > Install this marketplace skill: https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/SKILL.md
 
-The agent will fetch the skill and place it in whatever location it reads skills from (`.claude/commands/`, `.cursor/rules/`, etc.).
+The agent will fetch the router, ask you what you're trying to do, and pull the matching sub-skill.
 
-## Usage
+If you already know which sub-skill you want, you can install it directly:
 
-After installing, ask your agent to run the skill — e.g. `/hint-marketplace-create-app` (Claude Code) or "use the marketplace skill" (any agent). The skill will prompt for:
+| Sub-skill | What it does | Install URL |
+|---|---|---|
+| **create-app** | Build & deploy a new partner app from scratch | https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/create-app/SKILL.md |
+| **retrofit** *(planned)* | Add marketplace support to an existing codebase | https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/retrofit/SKILL.md |
+| **audit** *(planned)* | Security + marketplace-contract audit of a deployed app | https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/audit/SKILL.md |
+| **fill-listing** *(planned)* | Generate the marketplace listing copy + screenshots | https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/fill-listing/SKILL.md |
 
-1. **What does your app do?** A short description (1-2 sentences).
-2. **Which surface?** Either a Core Page (full-screen tab inside the practice portal) or a Clinical Interaction (rendered alongside a patient's chart).
-3. **Sandbox API key.** Generated from the Hint Partner Portal.
+## Repository layout
 
-From there it builds, deploys, and prints the install instructions.
+```
+.
+├── SKILL.md                     # Router — entry point, picks a sub-skill based on user intent
+├── README.md                    # This file
+│
+├── create-app/SKILL.md          # ✅ Build & deploy a new app
+├── retrofit/SKILL.md            # 📋 Planned — add marketplace support to an existing repo
+├── audit/SKILL.md               # 📋 Planned — pass/fail audit of a deployed app
+├── fill-listing/SKILL.md        # 📋 Planned — populate the marketplace listing
+│
+└── _common/                     # Shared fragments referenced by multiple sub-skills
+    └── api-conventions.md       # Hosts, auth, response shapes, pagination, reserved env vars
+```
+
+The `_common/` folder holds cross-cutting conventions so individual sub-skills don't repeat them. When a sub-skill needs to teach the agent about (e.g.) the bare-array response shape on `/api/provider/*`, it links to `_common/api-conventions.md` instead of inlining the same prose.
 
 ## Requirements
 
 - A Hint partner account with `product.type = "app"` ([request access](https://hint.com/partners))
-- A sandbox practice (auto-provisioned with the partner account)
+- A sandbox partner + sandbox practice (auto-provisioned with the account; create from the Partner Portal under **Sandboxes**)
 - A sandbox API key from the Partner Portal
 
 ## Versioning
 
-Skill version lives in the file's frontmatter. Bumps follow semver — major bumps mean a breaking change to the marketplace contract.
+Skill versions live in each `SKILL.md`'s frontmatter. The repo as a whole follows semver via git tags (e.g. `v1.0.0`). Major bumps mean a breaking change to the marketplace contract.
 
 ## Issues
 
