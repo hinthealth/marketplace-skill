@@ -23,6 +23,7 @@ Ask the user three things:
 2. **What type of surface?** How should the app appear in Hint:
    - **Core Page** (`core_page`) — a full-page app accessible from the sidebar. Best for dashboards, tools, and standalone features.
    - **Clinical Interaction** (`clinical_interaction`) — appears within clinical workflows, in the context of a specific patient/interaction. Best for clinical tools, lab viewers, and patient-specific features. Receives patient context via `HintSDK.currentPatient` and `HintSDK.interaction`.
+   - **Settings** (`settings`) — embedded inside the practice's settings area, alongside Hint's own configuration tabs. Best for partner-specific configuration UI (API keys the practice needs to enter, feature toggles, sync schedules, etc.). The anchor is labeled via `settings_label` on the API (defaults to the app name).
 
 3. **How do you want to host it?**
    - **Hosted** — Hint generates the app and runs it on Hint-managed infrastructure. Easiest path; you write nothing yourself. Pick this unless you have a specific reason not to.
@@ -126,7 +127,7 @@ const HINT_WEBHOOK_SECRET = process.env.HINT_WEBHOOK_SECRET || '';
 const APP_CONFIG = {
   name: 'APP_NAME_HERE',
   version: '1.0.0',
-  surfaceType: 'SURFACE_TYPE_HERE', // 'core_page' or 'clinical_interaction'
+  surfaceType: 'SURFACE_TYPE_HERE', // 'core_page', 'clinical_interaction', or 'settings'
 };
 
 // ============================================================
@@ -243,6 +244,14 @@ const server = http.createServer(async (req, res) => {
     const session = sessions[sessionKey];
     res.writeHead(200, { 'Content-Type': 'text/html' });
     return res.end(renderClinicalInteraction(sessionKey, session));
+  }
+
+  // Settings — embedded inside the practice settings area (for settings surface)
+  if (req.method === 'GET' && url.pathname === '/hint/settings') {
+    const sessionKey = url.searchParams.get('session_key');
+    const session = sessions[sessionKey];
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    return res.end(renderSettings(sessionKey, session));
   }
 
   // Headless connect — Hint POSTs auth code during installation.
@@ -380,6 +389,46 @@ function renderClinicalInteraction(sessionKey, session) {
 </html>`;
 }
 
+function renderSettings(sessionKey, session) {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${APP_CONFIG.name} Settings</title>
+  <link href="https://fonts.googleapis.com/css2?family=Wix+Madefor+Text:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Wix Madefor Text", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #FFFFFF; padding: 24px; color: #1D2334; }
+    h1 { font-size: 20px; font-weight: 500; margin-bottom: 8px; }
+    .subtitle { color: #43739E; font-size: 13px; margin-bottom: 24px; }
+    .field { margin-bottom: 16px; }
+    label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: #1D2334; }
+    input[type="text"], input[type="password"] { width: 100%; padding: 8px 10px; border: 1px solid #C4DCF8; border-radius: 6px; font-size: 14px; font-family: inherit; }
+    button { background: #0E68E2; color: #FFFFFF; border: 0; border-radius: 6px; padding: 8px 16px; font-size: 14px; font-family: inherit; font-weight: 500; cursor: pointer; }
+    button:hover { background: #0851B8; }
+    .info { color: #43739E; font-size: 12px; margin-top: 24px; }
+  </style>
+</head>
+<body>
+  <h1>${APP_CONFIG.name} Settings</h1>
+  <div class="subtitle">Configure how ${APP_CONFIG.name} works for this practice.</div>
+  <div id="app">
+    <!-- SETTINGS UI GOES HERE — partner-specific configuration: API keys, feature flags, etc. -->
+    <div class="field">
+      <label>Example setting</label>
+      <input type="text" placeholder="Replace with real settings inputs">
+    </div>
+    <button onclick="alert('Save not yet wired')">Save</button>
+  </div>
+  <div class="info">
+    ${session ? '<p>Practice: ' + (session.practice?.name || 'Unknown') + '</p>' : ''}
+  </div>
+  <script src="https://api.hint.com/hint-sdk.js"></script>
+</body>
+</html>`;
+}
+
 server.listen(port, () => console.log(APP_CONFIG.name + ' listening on ' + port));
 ```
 
@@ -388,8 +437,8 @@ server.listen(port, () => console.log(APP_CONFIG.name + ' listening on ' + port)
 Based on the user's app description:
 
 1. Replace `APP_NAME_HERE` with the app name
-2. Replace `SURFACE_TYPE_HERE` with `core_page` or `clinical_interaction`
-3. Customize `renderCorePage` or `renderClinicalInteraction` with the app's actual UI
+2. Replace `SURFACE_TYPE_HERE` with `core_page`, `clinical_interaction`, or `settings`
+3. Customize the matching renderer (`renderCorePage`, `renderClinicalInteraction`, or `renderSettings`) with the app's actual UI
 4. Add app-specific API routes (e.g. `/api/pets`, `/api/messages`) in the marked section
 5. Add any app-specific client-side JavaScript in the HTML
 
@@ -666,7 +715,15 @@ curl -s -X POST "$HINT_API_URL/api/partner/app/anchors" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d "{\"anchor\": {\"type\": \"clinical_interaction\", \"source_url\": \"$APP_URL/hint/clinical_interaction\"}}"
+
+# For settings:
+curl -s -X POST "$HINT_API_URL/api/partner/app/anchors" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"anchor\": {\"type\": \"settings\", \"source_url\": \"$APP_URL/hint/settings\", \"settings_label\": \"<App Name> Settings\"}}"
 ```
+
+An app can have one anchor of each type at most (`core_page`, `clinical_interaction`, `settings`) — pick the ones the app actually needs. Most apps register one, complex ones register two or three.
 
 ## Step 7: Verify & Report
 
@@ -683,7 +740,7 @@ Hint Marketplace App Set Up!
   Partner:     <partner_name>
   App URL:     <$APP_URL>
   Hosting:     <Hosted by Hint  or  Self-hosted by partner>
-  Surface:     <core_page or clinical_interaction>
+  Surface(s):  <core_page, clinical_interaction, settings — list the ones you registered>
 
   Routes (live on $APP_URL):
     GET  /                              — Health check
