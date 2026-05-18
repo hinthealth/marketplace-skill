@@ -36,12 +36,14 @@ If you already know which sub-skill you want, you can install it directly:
 ├── fill-listing/SKILL.md        # 🟡 Section-by-section listing editor (structure ready; per-section endpoints still being added)
 │
 └── _common/                     # Shared fragments referenced by multiple sub-skills
-    ├── api-conventions.md       # Hosts, auth, response shapes, pagination, reserved env vars
+    ├── api-conventions.md       # Hosts, auth, response shapes, pagination, reserved env vars (canonical)
     ├── marketplace-contract.md  # Required routes, signature verification, smoke test
-    └── provider-api.md          # Provider API endpoints, practice-scoped auth, JS SDK
+    ├── provider-api.md          # Provider API auth + JS SDK; MCP server pointer for endpoint discovery
+    ├── node-template.md         # Canonical Node.js implementation (package.json + server.js)
+    └── brand-styles.md          # Font, colors, typography, components for embedded surfaces
 ```
 
-The `_common/` folder holds cross-cutting conventions so individual sub-skills don't repeat them. When a sub-skill needs to teach the agent about (e.g.) the bare-array response shape on `/api/provider/*`, it links to `_common/api-conventions.md` instead of inlining the same prose.
+The `_common/` folder holds cross-cutting conventions and reusable assets so individual sub-skills don't repeat them. When a sub-skill needs to teach the agent about (e.g.) the bare-array response shape on `/api/provider/*`, it links to `_common/api-conventions.md` instead of inlining the same prose. `node-template.md` and `brand-styles.md` are the reference assets `create-app` ships and `retrofit` ports.
 
 ## Requirements
 
@@ -51,7 +53,7 @@ The `_common/` folder holds cross-cutting conventions so individual sub-skills d
 
 ## Versioning
 
-Skill versions live in each `SKILL.md`'s frontmatter. The repo as a whole follows semver via git tags (e.g. `v1.0.0`). Major bumps mean a breaking change to the marketplace contract.
+The repo follows semver via git tags (e.g. `v1.0.0`). Major bumps mean a breaking change to the marketplace contract. Individual `SKILL.md` files don't carry per-skill versions today — they ship together as one repo release.
 
 ## Issues
 

@@ -4,10 +4,10 @@ Audits the partner's existing application against the Hint marketplace contract 
 
 ## When to use this
 
-The partner already has a working web app and wants to surface it inside Hint. Three flavors:
+The partner already has a working web app and wants to surface it inside Hint. Two flavors:
 
-- **Bring-code + Hint hosts**: the partner's code lives in their repo; Hint deploys it on Hint-managed infrastructure. After retrofit, push via `POST /partner/app/revisions`.
-- **Bring-everything (Self-hosted)**: the partner already deploys the app themselves (Vercel, AWS, on-prem). After retrofit, the partner redeploys on their own infra and registers the URLs with Hint.
+- **Hosted by Hint**: the partner's code lives in their repo; Hint deploys it on Hint-managed infrastructure. After retrofit, push via `POST /partner/app/revisions`. Hosted mode runs `node server.js` and currently supports Node.js only — other stacks must go Self-hosted.
+- **Self-hosted**: the partner already deploys the app themselves (Vercel, AWS, on-prem). After retrofit, the partner redeploys on their own infra and registers the URLs with Hint. Any stack works.
 
 If the partner is starting from a blank repo, use [`create-app`](https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/create-app/SKILL.md) instead — that skill scaffolds from a known-good template.
 
@@ -21,10 +21,7 @@ Before doing anything, fetch and read these shared fragments — every retrofit 
 
 ## Platform URLs
 
-- **Hint API**: `https://api.hint.com` — accepts both sandbox (`sbx-`) and live keys; the key determines the environment.
-- **Partner Portal**: `https://app.hint.com`
-
-Set `$HINT_API_URL=https://api.hint.com` for both sandbox and live work; the API key prefix determines the environment.
+Set `$HINT_API_URL=https://api.hint.com` for both sandbox and live work (Partner Portal at `https://app.hint.com`). Full conventions: [`_common/api-conventions.md`](../_common/api-conventions.md).
 
 **IMPORTANT**: Never reference underlying infrastructure providers or code hosts to the partner. Everything is "Hint" from their perspective.
 
@@ -104,6 +101,8 @@ grep -rEn "SELECT|UPDATE|DELETE FROM" <repo> --include="*.sql" --include="*.rb" 
   | grep -vE "practice_id|tenant_id|organization_id|account_id"
 ```
 
+This surfaces *candidates*, not bugs — the regex will flag plenty of safe queries (lookups by primary key where the key is itself FK-scoped, fixed-row joins, framework-internal queries). Walk each hit manually; the goal is to spot tables that are read or written without any tenant filter anywhere in the codebase, not to count grep matches.
+
 Build a tenancy status table:
 
 ```
@@ -132,7 +131,7 @@ See `_common/marketplace-contract.md` "Tenancy" section for the canonical rule s
 
 For each missing route or env var hook, generate a code snippet in the partner's stack and apply it as an edit to the existing files. **Do not create new files unless the existing layout has no natural home** — match the partner's conventions.
 
-For Node.js (Express/Fastify/plain), Python (Flask/FastAPI), Ruby (Rails/Sinatra), Go (net/http/chi), PHP, Rust, etc., the pattern is the same — only the syntax differs. Use the [`create-app` server.js](https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/create-app/SKILL.md) as the canonical reference; port the logic, not the file structure.
+For Node.js (Express/Fastify/plain), Python (Flask/FastAPI), Ruby (Rails/Sinatra), Go (net/http/chi), PHP, Rust, etc., the pattern is the same — only the syntax differs. Use the canonical Node.js implementation at [`_common/node-template.md`](../_common/node-template.md) as the reference; port the logic, not the file structure.
 
 ### Snippet 1: `POST /hint/handshake` (signature-verified)
 
@@ -183,7 +182,7 @@ curl -sS -o /dev/null -w "POST /hint/handshake unsigned → %{http_code}\n" -X P
 
 # 3. Generate a valid signature and confirm 200:
 BODY='{"user":{"id":"u-test"},"practice":{"id":"p-test"}}'
-SIG="sha256=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$HINT_WEBHOOK_SECRET" | awk '{print $2}')"
+SIG="sha256=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$HINT_WEBHOOK_SECRET" | awk '{print $NF}')"
 curl -sS -X POST localhost:<port>/hint/handshake \
   -H "Content-Type: application/json" \
   -H "X-Hint-Signature: $SIG" \
