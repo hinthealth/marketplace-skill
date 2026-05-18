@@ -33,7 +33,7 @@ If you already know which sub-skill you want, you can install it directly:
 ├── create-app/SKILL.md          # ✅ Build & deploy a new app
 ├── retrofit/SKILL.md            # ✅ Add marketplace support to an existing app
 ├── audit/SKILL.md               # ✅ Pass/fail audit of a deployed app
-├── fill-listing/SKILL.md        # ✅ Populate the marketplace listing via the public API
+├── fill-listing/SKILL.md        # 🟡 Section-by-section listing editor (structure ready; per-section endpoints still being added)
 │
 └── _common/                     # Shared fragments referenced by multiple sub-skills
     ├── api-conventions.md       # Hosts, auth, response shapes, pagination, reserved env vars
