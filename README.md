@@ -19,9 +19,9 @@ If you already know which sub-skill you want, you can install it directly:
 | Sub-skill | What it does | Install URL |
 |---|---|---|
 | **create-app** | Build & deploy a new partner app from scratch | https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/create-app/SKILL.md |
-| **retrofit** *(planned)* | Add marketplace support to an existing codebase | https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/retrofit/SKILL.md |
-| **audit** *(planned)* | Security + marketplace-contract audit of a deployed app | https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/audit/SKILL.md |
-| **fill-listing** *(planned)* | Generate the marketplace listing copy + screenshots | https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/fill-listing/SKILL.md |
+| **retrofit** | Audit an existing app against the marketplace contract, generate the missing pieces, and wire it up | https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/retrofit/SKILL.md |
+| **audit** | Pass/fail security + marketplace-contract audit of a deployed app | https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/audit/SKILL.md |
+| **fill-listing** | Draft + apply the marketplace listing via the public API | https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/fill-listing/SKILL.md |
 
 ## Repository layout
 
@@ -31,12 +31,14 @@ If you already know which sub-skill you want, you can install it directly:
 ├── README.md                    # This file
 │
 ├── create-app/SKILL.md          # ✅ Build & deploy a new app
-├── retrofit/SKILL.md            # 📋 Planned — add marketplace support to an existing repo
-├── audit/SKILL.md               # 📋 Planned — pass/fail audit of a deployed app
-├── fill-listing/SKILL.md        # 📋 Planned — populate the marketplace listing
+├── retrofit/SKILL.md            # ✅ Add marketplace support to an existing app
+├── audit/SKILL.md               # ✅ Pass/fail audit of a deployed app
+├── fill-listing/SKILL.md        # ✅ Populate the marketplace listing via the public API
 │
 └── _common/                     # Shared fragments referenced by multiple sub-skills
-    └── api-conventions.md       # Hosts, auth, response shapes, pagination, reserved env vars
+    ├── api-conventions.md       # Hosts, auth, response shapes, pagination, reserved env vars
+    ├── marketplace-contract.md  # Required routes, signature verification, smoke test
+    └── provider-api.md          # Provider API endpoints, practice-scoped auth, JS SDK
 ```
 
 The `_common/` folder holds cross-cutting conventions so individual sub-skills don't repeat them. When a sub-skill needs to teach the agent about (e.g.) the bare-array response shape on `/api/provider/*`, it links to `_common/api-conventions.md` instead of inlining the same prose.
