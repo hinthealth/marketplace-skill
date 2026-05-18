@@ -567,7 +567,7 @@ Full API reference: https://developers.hint.com/reference
 Available in the embedded iframe:
 
 ```html
-<!-- Use $HINT_API_URL (api.sandbox.hint.com for sandbox, api.hint.com for live) -->
+<!-- Use $HINT_API_URL (https://api.sandbox.hint.com for sandbox, https://api.hint.com for live) -->
 <script src="$HINT_API_URL/hint-sdk.js"></script>
 <script>
   HintSDK.init(() => {
