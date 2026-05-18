@@ -540,46 +540,13 @@ Use these styles in the HTML renderers instead of the placeholder styles in the 
 - `HINT_PARTNER_ID` — partner public ID
 - `HINT_WEBHOOK_SECRET` — the partner's webhook signature key, used to verify HMAC signatures on handshake payloads
 
-### Hint Provider API
+### Hint Provider API + JS SDK
 
-The access token from handshake/connect gives the app access to practice data. Key endpoints:
+The access token from handshake/connect lets the embedded app read practice data. Endpoints, response-shape gotchas (bare arrays, `limit`/`offset` pagination, archived-by-default filtering, sandbox vs live host routing), and the in-iframe SDK example all live in the shared fragment:
 
-- `GET /api/provider/patients` — list patients
-- `GET /api/provider/patients/:id` — get patient details
-- `GET /api/provider/memberships` — list memberships
-- `GET /api/provider/practitioners` — list practitioners
-- `GET /api/provider/charges` — list charges
-- `GET /api/provider/invoices` — list invoices
+→ **https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/_common/provider-api.md**
 
-All require `Authorization: Bearer <access_token>` (the practice-scoped token from handshake, NOT the partner API key).
-
-**Response shape gotchas — read these before writing client code:**
-
-- **List endpoints return a bare JSON array**, not `{patients: [...]}` or `{data: [...]}`. Parse with `Array.isArray(res) ? res : []` and iterate directly. Do NOT do `res.patients || res.records || []` — that silently produces an empty array.
-- **Pagination uses `limit` + `offset`** (not `page` / `page_size`). Example: `GET /api/provider/patients?limit=50&offset=100`. Max `limit` is 100. If a response returns exactly `limit` rows, paginate.
-- **Archived rows are excluded by default** on list endpoints. To list only archived rows, pass `?filter=archived`. To list both active and archived in one call, pass `?filter=all`. If the app shows "no records" and the practice expects to see some, archive state is the first thing to check.
-- **Sandbox vs live is host-level, not key-level.** Sandbox traffic goes to `https://api.sandbox.hint.com`, live traffic goes to `https://api.hint.com`. Sandbox API keys (prefix `sbx-`) only work against the sandbox host; live keys only work against the live host. Pick the host based on the API key the practice's app is configured with — they're not interchangeable.
-
-Full API reference: https://developers.hint.com/reference
-
-### Hint JS SDK
-
-Available in the embedded iframe:
-
-```html
-<!-- Use $HINT_API_URL (https://api.sandbox.hint.com for sandbox, https://api.hint.com for live) -->
-<script src="$HINT_API_URL/hint-sdk.js"></script>
-<script>
-  HintSDK.init(() => {
-    console.log('User:', HintSDK.user);           // { id, name, email, partner_roles }
-    console.log('Patient:', HintSDK.currentPatient); // { id, name } or null
-    console.log('Interaction:', HintSDK.interaction); // { id } or null
-  });
-  HintSDK.onCurrentPatientChanged((patient) => {
-    // Update UI when the selected patient changes
-  });
-</script>
-```
+Fetch and read that file before writing any `/api/provider/*` client code or embedding the JS SDK — getting the response shape or the host wrong silently produces empty results or 401s.
 
 ## Step 4: (Optional) Configure the Deployment Service
 
@@ -655,20 +622,11 @@ The partner runs the app on their own infrastructure. The skill doesn't build, p
 
 ## Step 3: Confirm the Marketplace Contract
 
-The partner's deployed app must already implement (or be willing to implement) three routes. Ask the partner to confirm each is in place, or offer to walk them through what each one needs to do:
+The partner's deployed app must implement three HTTP routes and read four reserved env vars. The canonical contract — including the signature-verification pseudocode and a smoke-test script — lives in the shared fragment:
 
-| Route | What it does |
-|---|---|
-| `POST /hint/handshake` | Receives a signed payload from Hint at install/embed time. The app verifies the `X-Hint-Signature` header (HMAC-SHA256 of the request body, key = the partner's webhook secret), mints a session key, and returns it. |
-| `POST /hint/connect/:code` | Receives an OAuth code from Hint after a practice installs. The app exchanges the code at `POST $HINT_API_URL/api/oauth/tokens` for a practice-scoped API token and persists it. |
-| `GET /hint/<anchor_type>?session_key=...` | Renders the embedded UI for that surface. Looks up the session by `session_key` and the practice context that was set up during handshake. |
+→ **https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/_common/marketplace-contract.md**
 
-The partner's app also needs to know two pieces of environment config Hint provides at install time:
-
-- `HINT_API_URL` — the base URL of the Hint API. Set to `https://api.sandbox.hint.com` while testing with a sandbox API key (`sbx-...`), and `https://api.hint.com` once promoted to live. The two hosts are not interchangeable.
-- `HINT_WEBHOOK_SECRET` — used to verify the `X-Hint-Signature` header on every `POST /hint/handshake`. The partner finds this in the Partner Portal under **API Keys → Webhooks Signature Key**.
-
-If the partner's app is missing one of those routes, point them at the **Hosted Mode** server.js template above as a reference implementation — they can copy the handshake-verification + OAuth-exchange code straight across. They don't have to use Node.js; they just need an HTTP server that implements the three routes.
+Fetch and read that file before continuing. Walk the partner through whichever routes they don't yet have. If their app is missing any, point them at the **Hosted Mode** `server.js` template above as a Node.js reference implementation — the handshake-verification + OAuth-exchange code ports cleanly to any language.
 
 ## Step 4: Gather the Partner's Deployed URL
 
