@@ -4,11 +4,10 @@ This file is referenced by multiple skills in this repo. It documents the cross-
 
 ## Hosts
 
-- **Hint API (sandbox)**: `https://api.sandbox.hint.com` — for `sbx-` API keys
-- **Hint API (live)**: `https://api.hint.com` — for live API keys (no prefix)
-- **Partner Portal**: `https://app.hint.com`
-
-Sandbox keys only work against the sandbox host. Live keys only work against the live host. Mixing them returns 401. Pick the host from the API key the partner gives you.
+- **Hint API**: `https://api.hint.com` — works with both sandbox (`sbx-` prefix) and live API keys. The key determines the environment, not the host.
+- **Hint API (sandbox-only alias)**: `https://api.sandbox.hint.com` — listed in the official docs; accepts sandbox keys and returns identical data to `api.hint.com`. Use `api.hint.com` everywhere for simplicity so the partner doesn't have to swap hosts when promoting from sandbox to live.
+- **Hint API (staging)**: `https://api.staging.hint.com` — Hint-internal pre-production environment. Partners don't generally hit this directly.
+- **Partner Portal**: `https://app.hint.com` — single portal for both sandbox and live; partners switch between workspaces inside it.
 
 ## Authentication
 

@@ -4,13 +4,13 @@ Build and deploy a fully working partner app to the Hint marketplace. This skill
 
 ## Platform URLs
 
-- **Hint API (sandbox)**: `https://api.sandbox.hint.com` — for sandbox testing. Use this whenever the partner API key starts with `sbx-`.
-- **Hint API (live)**: `https://api.hint.com` — for live partners after the app is approved + promoted. Use this with API keys that have no `sbx-` prefix.
+- **Hint API**: `https://api.hint.com` — works with both sandbox (`sbx-` prefix) and live keys. Use this everywhere for simplicity; the partner doesn't have to swap hosts when promoting from sandbox to live.
+- **Hint API (sandbox-only alias)**: `https://api.sandbox.hint.com` — exists per the official docs and accepts sandbox keys, but returns identical data to `api.hint.com`. No practical reason to switch to it.
 - **Partner Portal**: `https://app.hint.com` — single portal for both sandbox and live; partners switch between sandbox/live workspaces inside it.
 
-**Rule:** set `$HINT_API_URL` based on the API key the partner gives you — sandbox key → sandbox API host, live key → live API host. Mixing them (sandbox key against live host, or vice versa) returns 401. The same rule applies to the `HINT_API_URL` env var on the deployed service: sandbox-deployed apps point at the sandbox host, live-deployed apps at the live host (Hint sets this automatically in Hosted Mode).
+**Rule:** set `$HINT_API_URL=https://api.hint.com` for both sandbox and live work. The `sbx-` prefix on the API key determines the environment; the host is the same. (Hint sets this env var automatically on Hosted-Mode services.)
 
-**IMPORTANT**: Never reference any underlying infrastructure providers, code hosts, or background-worker systems to the user. From the partner's perspective, everything is "Hint" — the Hint API, the Hint Partner Portal, Hint's managed deployment platform. The partner uploads code and Hint deploys it. Internal infrastructure is invisible.
+**IMPORTANT**: Don't name underlying infrastructure providers, code hosts, or background-worker systems in any user-facing copy you generate (READMEs, install instructions, error messages, descriptions). Refer to the platform as "Hint" — the Hint API, Hint Partner Portal, Hint's managed deployment platform. The deployed service URL itself is what it is (currently a third-party hostname); don't pretend otherwise, just don't volunteer the provider's name in things you write.
 
 ## Getting Started
 
@@ -52,10 +52,12 @@ curl -s "$HINT_API_URL/api/partner/partner" \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-From the response, extract:
-- `name` — partner name
-- `slug` — URL-safe identifier (used for repo name and service URL)
-- `product.type` — must be `app`
+From the response, extract whichever of these are present (fresh sandbox partners may not have all of them populated):
+- `name` — partner name (often empty on a brand-new sandbox; the partner can set it later via `PATCH /partner/partner`)
+- `slug` — URL-safe identifier; may be absent on fresh sandboxes
+- `product.type` — should be `app` for marketplace apps. If the field is missing or null, treat that as "not yet configured" — ask the partner to confirm with Hint support that their partner has been set up as an app-type product, then continue. Don't hard-fail; an absent product is a setup-state quirk, not a wrong-product error.
+
+If POST/PATCH calls later return "Partner product type must be app", that's the firm rejection — at that point the partner type genuinely needs admin attention before deploying.
 
 Also check if the app already exists:
 ```bash
@@ -686,6 +688,8 @@ curl -s -o /dev/null -w '%{http_code}' $APP_URL/
 
 Start at a **5-second interval, fall back to 10 seconds** if not live by the second poll. Cap at 5 minutes. Once the health check responds with a 200, the app is live — the service URL is the source of truth.
 
+**Expect 502s for the first few seconds after `status: pushed`.** The container is finishing its boot while you're polling. A 502 (or "Application failed to respond") on the first 1-3 polls is normal — treat it as "still booting", not "broken". Only escalate if 502s persist past ~60 seconds, or if you see a 4xx (which indicates a real error, e.g. handshake URL mismatched).
+
 If the revision flips to `status: failed`, the platform refused the deploy (typical reasons: partner not yet approved for production deploys; partner product type is not `app`; push failure). Contact Hint support (devsupport@hint.com) with the revision id.
 
 Save the live URL as `$APP_URL` and skip past Self-Hosted Mode to **Step 6: Configure Marketplace Settings**.
@@ -827,7 +831,8 @@ Env var changes hit the deployed service immediately. Build/start command change
 - **(Hosted) Revision stays at `status: pushed` but `$APP_URL` never serves the new code** — The platform's build is in progress (typically 2-3 min). If it stays stuck past 10 min, contact Hint support with the revision's `commit_sha`.
 - **(Self-hosted) `$APP_URL` returns the wrong content / 404 on /hint/handshake** — The partner's app isn't actually serving the marketplace routes at the URL they gave. Have them double-check their deployment, then re-run the smoke-test curls from Self-Hosted Step 4.
 - **"Product type must be app"** — The partner's product type must be `app`. Update it in the Partner Portal.
-- **403 on Partner API** — The API key may not have the right permissions.
+- **403 on Partner API write endpoints** — Sandbox keys (`sbx-` prefix) can fully manage the marketplace plumbing (revisions, services, anchors, app + partner settings) but **cannot create or modify business records** (e.g. `POST /api/partner/charges`, `POST /api/partner/practice_charges`). Those endpoints require a production-approved partner — contact [devsupport@hint.com](mailto:devsupport@hint.com) for promotion. If a sandbox key is hitting 403 on a non-business endpoint, the API key may not have the right permissions; double-check it's the partner's own key, not an integration key.
+- **428 "This action requires a Practice" on `/api/provider/*`** — You called a Provider endpoint with the partner-wide `HINT_API_KEY` instead of a practice-scoped access token. Provider endpoints can only be called on behalf of a specific practice — use the access_token from `POST /api/oauth/tokens` (the value persisted during `/hint/connect/:code`). See `_common/provider-api.md`.
 - **Handshake fails with 401** — The webhook secret may not be configured correctly on the deployed service. The partner finds it in the Partner Portal under API Keys → Webhooks Signature Key.
 - **Headless connect fails** — The API URL env var may not point to the correct Hint API instance.
 - **Embedded page doesn't load** — Verify the anchor exists and the `source_url` matches `$APP_URL` + the correct route for the surface type.

@@ -34,11 +34,10 @@ The skill is structured by **listing section**. Each section maps to its own pub
 
 ## Platform URLs
 
-- **Hint API (sandbox)**: `https://api.sandbox.hint.com` — for `sbx-` API keys
-- **Hint API (live)**: `https://api.hint.com` — for live API keys
+- **Hint API**: `https://api.hint.com` — accepts both sandbox (`sbx-`) and live keys; the key determines the environment.
 - **Partner Portal**: `https://app.hint.com`
 
-Set `$HINT_API_URL` based on the API key prefix.
+Set `$HINT_API_URL=https://api.hint.com` for both sandbox and live work; the API key prefix determines the environment.
 
 ## Step 1: Gather Inputs
 

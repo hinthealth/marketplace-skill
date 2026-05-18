@@ -16,7 +16,7 @@ The deployed app reads these from `process.env` (or the equivalent in its langua
 
 | Env var | Purpose |
 |---|---|
-| `HINT_API_URL` | Base URL of the Hint API. **Sandbox**: `https://api.sandbox.hint.com`. **Live**: `https://api.hint.com`. The two hosts are not interchangeable — sandbox keys (prefix `sbx-`) only work against the sandbox host, live keys only against the live host. |
+| `HINT_API_URL` | Base URL of the Hint API. Use `https://api.hint.com` for both sandbox and live (the key prefix determines the environment, the host doesn't). `https://api.sandbox.hint.com` exists per the official docs and returns identical data for sandbox keys; no practical reason to switch. |
 | `HINT_API_KEY` | Partner-wide API key for `/api/partner/*` calls. NOT used for `/api/provider/*` calls (those need the practice-scoped access token from `/hint/connect/:code`). |
 | `HINT_PARTNER_ID` | Stable partner ident (e.g. `ptr-...` / `sbx-ptr-...`). Useful for log scoping. |
 | `HINT_WEBHOOK_SECRET` | Used to verify the `X-Hint-Signature` header on `POST /hint/handshake`. The partner finds this in the Partner Portal under **API Keys → Webhooks Signature Key**. |
