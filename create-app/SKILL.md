@@ -132,6 +132,28 @@ const APP_CONFIG = {
 };
 
 // ============================================================
+// MULTI-TENANCY — READ THIS BEFORE ADDING ANY PERSISTED STATE
+//
+// This app is a single deployed service that EVERY practice installing
+// it shares. The handshake payload identifies the practice making each
+// request — and this app is responsible for using that identity to keep
+// every practice's data isolated from every other practice's.
+//
+// Rules:
+//   1. Every table that stores tenant data MUST have a non-null
+//      `practice_id` column.
+//   2. Every read AND write MUST filter by `practice_id` sourced from
+//      the current session.
+//   3. Practice access tokens (used to call /api/provider/*) MUST come
+//      from the current session's `practice_id` — never reuse a token
+//      from a different practice.
+//
+// Use `requireSession(req, res)` below for every handler that touches
+// persisted state. It returns `{ practice_id, access_token, user }`
+// for the current request, or null (and writes 401) if no valid session.
+// ============================================================
+
+// ============================================================
 // Session store (in-memory)
 //
 // NOTE: This template stores sessions + practice access tokens in memory
@@ -141,9 +163,45 @@ const APP_CONFIG = {
 // For anything beyond a demo, persist to the Postgres database that Hint
 // auto-provisions alongside this service. The connection string is
 // available at `process.env.DATABASE_URL`. Add `pg` (already in the
-// dependencies) and write the sessions table on boot.
+// dependencies) and write a sessions table on boot. Schema sketch:
+//
+//   CREATE TABLE sessions (
+//     session_key  TEXT PRIMARY KEY,
+//     practice_id  TEXT NOT NULL,
+//     access_token TEXT,
+//     user_data    JSONB,
+//     created_at   TIMESTAMPTZ DEFAULT NOW()
+//   );
+//   CREATE INDEX ON sessions(practice_id);
+//
+// And for any app-specific table:
+//
+//   CREATE TABLE messages (
+//     id          SERIAL PRIMARY KEY,
+//     practice_id TEXT NOT NULL,     -- MANDATORY for tenant data
+//     body        TEXT,
+//     author_id   TEXT,
+//     created_at  TIMESTAMPTZ DEFAULT NOW()
+//   );
+//   CREATE INDEX ON messages(practice_id);
 // ============================================================
 const sessions = {};
+
+// Practice-scoped access tokens, keyed by practice_id (from /hint/connect/:code).
+const practiceTokens = {};
+
+function requireSession(req, res) {
+  const url = new URL(req.url, `http://localhost:${port}`);
+  const sessionKey = req.headers['x-hint-session-key'] || url.searchParams.get('session_key');
+  const session = sessionKey ? sessions[sessionKey] : null;
+  if (!session) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'No session' }));
+    return null;
+  }
+  // Attach the practice's access_token so handlers can call /api/provider/*.
+  return { ...session, access_token: practiceTokens[session.practice_id] || null };
+}
 
 // ============================================================
 // Helpers
@@ -219,12 +277,14 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(401, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ error: 'Invalid signature' }));
     }
+    // Persist the session keyed by sessionKey AND remember practice_id so
+    // every subsequent handler can scope reads/writes to it.
     const sessionKey = crypto.randomUUID();
     sessions[sessionKey] = {
+      practice_id: parsed.practice?.id,        // ← the tenancy anchor; treat as required
       user: parsed.user,
       practice: parsed.practice,
       integration: parsed.integration,
-      accessToken: parsed.access_token,
       createdAt: new Date().toISOString(),
     };
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -268,16 +328,18 @@ const server = http.createServer(async (req, res) => {
   // `process.env.DATABASE_URL` for anything beyond a demo).
   if (req.method === 'POST' && url.pathname.startsWith('/hint/connect/')) {
     const authCode = url.pathname.replace('/hint/connect/', '');
-    console.log('Headless connect, auth code: ' + authCode);
     try {
       if (HINT_API_URL && HINT_API_KEY) {
         const resp = await hintApi('POST', '/api/oauth/tokens', {
           code: authCode,
           grant_type: 'authorization_code',
         });
-        // TODO: persist resp.body.access_token + practice_id to DATABASE_URL
-        // so the embedded surface can use it to call /api/provider/*.
-        console.log('Token exchange:', resp.status, JSON.stringify(resp.body));
+        // The access_token is practice-scoped — persist it keyed by practice_id
+        // so we use the right token per request. The embedded surface looks
+        // this up via requireSession() → practiceTokens[session.practice_id].
+        if (resp.body?.practice_id && resp.body?.access_token) {
+          practiceTokens[resp.body.practice_id] = resp.body.access_token;
+        }
       }
     } catch (err) {
       console.error('Connect error:', err.message);
@@ -288,6 +350,20 @@ const server = http.createServer(async (req, res) => {
 
   // ============================================================
   // APP-SPECIFIC ROUTES — add your routes here
+  //
+  // Every handler that touches tenant data must call requireSession(req, res)
+  // and scope queries by session.practice_id. Example:
+  //
+  //   if (req.method === 'GET' && url.pathname === '/api/messages') {
+  //     const session = requireSession(req, res); if (!session) return;
+  //     // SELECT * FROM messages WHERE practice_id = $1 ORDER BY created_at DESC
+  //     const rows = await db.query(
+  //       'SELECT * FROM messages WHERE practice_id = $1 ORDER BY created_at DESC',
+  //       [session.practice_id],
+  //     );
+  //     res.writeHead(200, { 'Content-Type': 'application/json' });
+  //     return res.end(JSON.stringify(rows));
+  //   }
   // ============================================================
 
   // 404

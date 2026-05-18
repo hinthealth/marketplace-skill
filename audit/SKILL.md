@@ -174,6 +174,30 @@ For each service:
 - `status: 'provisioning'` — WARN, deploy in progress
 - `status: 'provisioning_failed'` — FAIL, partner needs to contact support or retry
 
+### 3.10 Cross-practice tenancy probe (CRITICAL)
+
+Static analysis can't reliably catch tenancy bugs — the only test that catches mis-scoping is exercising the app from two practices and confirming each can't read the other's data. This check requires two sandbox practices and is the most expensive in the suite (multiple round-trips) — run it last.
+
+**Prerequisites:**
+- The partner has at least two sandbox practices set up (create via Partner Portal → Sandboxes if not).
+- API keys for both practices' installations of the app — these are different from the partner-wide API key. They come from the OAuth-exchange that runs on `/hint/connect/:code`.
+- A way to write at least one piece of practice-scoped data via the app (call this the "probe write" — usually a POST to one of the app's own API routes).
+
+**Probe sequence:**
+
+1. As **practice A**: simulate handshake + connect → obtain `session_key_A` + `access_token_A` + `practice_id_A`.
+2. As practice A: write a unique sentinel value into the app's state (POST to whatever the app's "create message" / "store config" / "save record" endpoint is, with `session_key_A`).
+3. Read it back as practice A — confirm the sentinel appears.
+4. As **practice B**: simulate handshake + connect → obtain `session_key_B`, `access_token_B`, `practice_id_B`.
+5. As practice B: hit the same read endpoint with `session_key_B`. **Sentinel from step 2 must NOT appear in the response.**
+6. As practice B: write a different sentinel. Confirm practice A's read with `session_key_A` still doesn't see practice B's sentinel.
+
+PASS: each practice's reads return only its own writes. FAIL: any sentinel appears in the other practice's reads (cross-practice data leak — **critical, app must not go to live until fixed**).
+
+If the app has no partner-controlled write endpoints (read-only against `/api/provider/*`), tenancy is automatic — the practice-scoped access_token enforces isolation at the Hint API layer. Skip this check with a note: `SKIPPED — app does not persist tenant state.`
+
+Surface fixes from the [`retrofit` tenancy audit](https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/retrofit/SKILL.md) — schema changes + per-table `practice_id` + every query scoped. See `_common/marketplace-contract.md` "Tenancy" section.
+
 ## Step 4: Output the Report
 
 Print a structured report grouped by severity. Example:
@@ -209,7 +233,7 @@ Remediation:
 
 ## Step 5: Severity Levels
 
-- **CRITICAL** — security or functional break. App should not go live until fixed. Includes: handshake accepts unsigned requests, handshake accepts forged signatures, plain-http URLs leaking session keys, services in `provisioning_failed`.
+- **CRITICAL** — security or functional break. App should not go live until fixed. Includes: handshake accepts unsigned requests, handshake accepts forged signatures, plain-http URLs leaking session keys, services in `provisioning_failed`, cross-practice data leak (3.10 probe fails).
 - **HIGH** — functional issue. App will fail in some real-world scenarios. Includes: anchor URLs returning 404 / 5xx, missing handshake_url, missing redirect_url.
 - **MEDIUM** — quality / UX issue. App works but looks incomplete. Includes: missing partner.email, missing anchor labels, partner.name placeholder text.
 - **WARN** — convention deviation. Not wrong, just unusual. Includes: anchor source_url paths that don't match the template convention.

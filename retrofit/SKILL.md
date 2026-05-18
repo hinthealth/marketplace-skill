@@ -90,6 +90,45 @@ Env-var hooks:
   DATABASE_URL          ✓ read at config/db.js:3
 ```
 
+### Tenancy audit (CRITICAL)
+
+A marketplace app is shared across every practice that installs it. The partner's existing app must scope every read and write to the current request's `practice_id` (sourced from the handshake session). If their existing schema and queries weren't built around a tenant column, retrofit is a bigger migration than just adding the three contract routes — flag this up-front instead of producing a working install that silently leaks data across practices.
+
+Inspect the existing schema and queries:
+
+```bash
+# Find candidate tenant tables — any user-facing data store
+grep -rEn "CREATE TABLE|CREATE_TABLE|@Entity|class.*Model|Schema\(" <repo> --include="*.sql" --include="*.rb" --include="*.py" --include="*.ts" --include="*.go"
+
+# For each suspected tenant table, look for queries that don't filter by practice_id (or whatever the partner's tenant column is named)
+grep -rEn "SELECT|UPDATE|DELETE FROM" <repo> --include="*.sql" --include="*.rb" --include="*.py" --include="*.ts" --include="*.go" \
+  | grep -vE "practice_id|tenant_id|organization_id|account_id"
+```
+
+Build a tenancy status table:
+
+```
+Tenant data audit for <repo>:
+
+  Table          practice_id column?   Queries scoped?
+  users          ✗ MISSING             ✗ 14 unscoped queries — needs migration
+  messages       ✗ MISSING             ✗ 8 unscoped queries — needs migration
+  audit_log      ✓ present             ✓ all 6 queries scoped
+  feature_flags  N/A (global config)   N/A
+```
+
+For any table missing the `practice_id` column or with unscoped queries:
+
+- The existing app is **single-tenant**. To retrofit safely, the partner must (a) add a non-null `practice_id` column to every tenant table via a migration, (b) backfill existing rows (single-tenant data goes to a fixed practice_id, or stays inaccessible from the marketplace install), (c) rewrite every query to filter by it, and (d) add tests that confirm cross-practice isolation.
+- This is a bigger lift than retrofit covers in a single pass. **Stop here and surface the scope to the partner explicitly** — don't continue generating the marketplace contract routes until they've decided how to handle tenancy. Options to offer:
+  1. Migrate the existing app to multi-tenant in place (their dev time, their call).
+  2. Stand up a new multi-tenant service alongside the existing one (more isolation, less churn on the existing code).
+  3. Make the marketplace install read-only against the existing data (skip the persisted-state risk entirely for v1).
+
+If the partner already runs multi-tenant (every tenant table has `practice_id` or equivalent and every query scopes), proceed to Step 3 — but make sure the marketplace contract handlers source `practice_id` from the handshake session, not from a query-string param.
+
+See `_common/marketplace-contract.md` "Tenancy" section for the canonical rule statement to share with the partner.
+
 ## Step 3: Generate the Missing Pieces
 
 For each missing route or env var hook, generate a code snippet in the partner's stack and apply it as an edit to the existing files. **Do not create new files unless the existing layout has no natural home** — match the partner's conventions.
