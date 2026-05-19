@@ -221,11 +221,11 @@ Hold `$APP_URL` — the next step uses it.
 
 Once `$APP_URL` is known (Hint-provisioned in Hosted Mode, partner-supplied in Self-Hosted Mode), configure the partner for automatic activation and embedding:
 
-> **In managed-hosted mode**, omit `auth_type` from the partner PATCH — managed partners are pinned to `manual` and shouldn't be flipped to `automatic_headless`. Send just `redirect_url`.
+> **In managed-hosted mode**, skip the `PATCH /partner/partner` call entirely. For managed partners the integration is created and activated programmatically by Hint (no OAuth/headless handshake fires), so neither `auth_type` nor `redirect_url` is consulted. Jump straight to the `PATCH /partner/app` handshake_url + anchor creation below.
 
 ```bash
 # Set auth type and redirect URL for automatic headless activation
-# (managed-hosted mode: drop auth_type, keep just redirect_url)
+# (managed-hosted mode: skip this PATCH entirely)
 curl -s -X PATCH "$HINT_API_URL/api/partner/partner" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
