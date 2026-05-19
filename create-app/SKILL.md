@@ -150,13 +150,15 @@ curl -s "$HINT_API_URL/api/partner/app/revisions" \
   | python3 -c "import sys,json; print(next((r['status'] for r in json.load(sys.stdin) if r['id']=='$REV_ID'),'?'))"
 ```
 
-Once status is `pushed`, get the service URL. The services list is also a bare array; it can contain multiple rows (e.g. an auto-provisioned Postgres alongside the web service, plus the occasional stub from a prior provision attempt). **Select the web service that has a non-null `service_url` and `status: "active"`** — don't just take the first row:
+Once status is `pushed`, get the service URL. The services list is a bare array containing both the partner-managed web app AND the auto-provisioned Postgres sibling (and occasionally a stub from a prior provision attempt). **Filter by `service_type: 'web'` + `status: "active"`** — the database row has `service_type: 'database'` and `service_url: null`:
 
 ```bash
 curl -s "$HINT_API_URL/api/partner/app/services" \
   -H "Authorization: Bearer $API_KEY" \
-  | python3 -c "import sys,json; print(next((s['service_url'] for s in json.load(sys.stdin) if s.get('service_url') and s.get('status')=='active'),''))"
+  | python3 -c "import sys,json; print(next((s['service_url'] for s in json.load(sys.stdin) if s.get('service_type')=='web' and s.get('status')=='active' and s.get('service_url')),''))"
 ```
+
+> The database sibling shows up in this list so partners can see it exists, but `GET /api/partner/app/services/:id` and `PATCH /api/partner/app/services/:id` only accept web service ids — the partner-managed fields (`build_command`, `start_command`, `env_vars`) don't apply to Postgres, so the database id returns 404 on those endpoints.
 
 Save the resulting URL as `$APP_URL`. Then poll it directly until it returns 200 (the build is usually live within a few seconds of `status: pushed`):
 
