@@ -10,6 +10,19 @@ Set `$HINT_API_URL=https://api.hint.com` for both sandbox and live work (Partner
 
 ## Getting Started
 
+### Managed-hosted mode (practice-initiated)
+
+If the user invokes this skill with the phrase **"managed hosted mode"** (e.g. "Use the marketplace skill in managed hosted mode"), they came in from the **App** tab in the Hint practice Developers section. In that case:
+
+- The sandbox partner + practice + API key are already provisioned for them; **skip the "Setting Up a Sandbox Partner" section below entirely**.
+- The hosting choice is settled — they're on **Hosted** mode. Don't ask question 3.
+- They copy the sandbox API key from the practice App tab (not the Partner Portal). If they don't have one yet, point them at `/admin/developers/app` in their practice account.
+- The "Update product type in Partner Portal" troubleshooting in Step 1 doesn't apply — practice users don't have Partner Portal access. If `product.type` isn't `app`, point them at [devsupport@hint.com](mailto:devsupport@hint.com) instead.
+
+Then proceed with questions 1 + 2 below and skip straight to Step 1.
+
+### Regular partner mode
+
 Ask the user three things:
 
 1. **What does your app do?** Get a description of the app they want to build. Examples:
@@ -32,6 +45,8 @@ Then ask if they already have a **sandbox partner API key** (starts with `sbx-`)
 
 ### Setting Up a Sandbox Partner
 
+> Skip this section entirely if the user invoked the skill with **"managed hosted mode"** — their sandbox is already set up; they just need to paste the key from the practice App tab.
+
 1. **Log in to the Partner Portal** at `https://app.hint.com/partner/dashboard`
 2. Click **"Go to Sandboxes"** in the Sandbox Setup section on the dashboard
 3. **Create a Sandbox Partner** — this creates an isolated copy of your partner for development
@@ -53,7 +68,7 @@ From the response, extract whichever of these are present (fresh sandbox partner
 - `slug` — URL-safe identifier; may be absent on fresh sandboxes
 - `product.type` — should be `app` for marketplace apps. If the field is missing or null, treat that as "not yet configured" — ask the partner to confirm with Hint support that their partner has been set up as an app-type product, then continue. Don't hard-fail; an absent product is a setup-state quirk, not a wrong-product error.
 
-If POST/PATCH calls later return "Partner product type must be app", that's the firm rejection — at that point the partner type genuinely needs admin attention before deploying.
+If POST/PATCH calls later return "Partner product type must be app", that's the firm rejection — at that point the partner type genuinely needs admin attention before deploying. **In managed-hosted mode, the practice can't fix this themselves** — point them at [devsupport@hint.com](mailto:devsupport@hint.com).
 
 Also check if the app already exists:
 ```bash
@@ -206,8 +221,11 @@ Hold `$APP_URL` — the next step uses it.
 
 Once `$APP_URL` is known (Hint-provisioned in Hosted Mode, partner-supplied in Self-Hosted Mode), configure the partner for automatic activation and embedding:
 
+> **In managed-hosted mode**, skip the `PATCH /partner/partner` call entirely. For managed partners the integration is created and activated programmatically by Hint (no OAuth/headless handshake fires), so neither `auth_type` nor `redirect_url` is consulted. Jump straight to the `PATCH /partner/app` handshake_url + anchor creation below.
+
 ```bash
 # Set auth type and redirect URL for automatic headless activation
+# (managed-hosted mode: skip this PATCH entirely)
 curl -s -X PATCH "$HINT_API_URL/api/partner/partner" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
