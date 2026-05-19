@@ -205,7 +205,7 @@ curl -s -X POST "$HINT_API_URL/api/partner/app/revisions" \
   -F "code_archive=@/tmp/retrofit-deploy.zip;type=application/zip"
 ```
 
-Save the revision id, poll `GET /api/partner/app/revisions` until `status: pushed`, then poll `GET /api/partner/app/services` for the service whose `service_url` is non-null and `status: "active"`. Save that as `$APP_URL`.
+Save the revision id, poll `GET /api/partner/app/revisions` until `status: pushed`, then poll `GET /api/partner/app/services` for the row with `service_type: 'web'` and `status: "active"`. Save that `service_url` as `$APP_URL`. The list also contains an auto-provisioned Postgres sibling (`service_type: 'database'`, `service_url: null`) — skip it.
 
 **Pre-deploy checklist for Hosted Mode:**
 - The entry file MUST be `server.js` if Node.js (Hint's start command is `node server.js`).
