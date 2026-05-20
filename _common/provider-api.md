@@ -6,7 +6,8 @@ The Provider API is what marketplace apps use to read + write practice data on b
 
 - **MCP server (recommended for agents)**: `https://developers.hint.com/mcp` — install this and the agent can query endpoint definitions, parameters, response schemas, and example payloads natively. Set it up before exploring the API; it'll save hours, and it's the authoritative way to discover field names and object schemas.
 - **Inline field reference**: [`provider-api-fields.md`](./provider-api-fields.md) — schema sketch + gotchas for the five most-used resources (patients, memberships, customer_invoices, payments, practitioners). Use this when the MCP server isn't available — it's enough to write client code that returns correct numbers instead of guessing field names. Critical for revenue/membership-count metrics: read it before any chart or KPI work.
-- **Browsable reference**: https://developers.hint.com/reference — direct links to specific endpoint pages work well; the index page is JS-rendered so scraping it is unreliable.
+- **llms.txt index + per-endpoint `.md`**: when MCP isn't an option, [`https://developers.hint.com/llms.txt`](https://developers.hint.com/llms.txt) lists every guide and reference endpoint with its `.md` URL. Fetch the index once to discover slugs, then `curl https://developers.hint.com/reference/<slug>.md` for any one endpoint's full OpenAPI definition. Example: `couponlistallcoupons-1.md`, `patientlistallpatients-1.md`. Slugs are not perfectly guessable (lowercased tag + operationId, no separator) — start from `llms.txt`, don't hand-derive them.
+- **Browsable reference**: https://developers.hint.com/reference — useful as a human-readable view of a specific endpoint. The index page itself is JS-rendered so scraping it is unreliable; use `llms.txt` for programmatic discovery.
 
 ## Authentication
 
