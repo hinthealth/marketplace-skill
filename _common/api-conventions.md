@@ -49,6 +49,10 @@ GET /api/provider/customer_invoices?created_at[gte]=2026-01-01&created_at[lte]=2
 
 Each timestamp field (`created_at`, `updated_at`, `paid_at`, etc.) accepts `[gte]`, `[gt]`, `[lte]`, `[lt]`, `[eq]`. This is the most common filter idiom after pagination.
 
+## Sandbox `created_at` is the seed-run timestamp
+
+In sandbox, every record's `created_at` (patient, membership, invoice, payment) is the timestamp of the seed run that loaded the data — they're all within seconds of each other. Any chart bucketed on `created_at` will be flat-flat-flat-spike-on-seed-day for every metric. Bucket by domain dates instead: `joined_practice_date` (patients), `start_date` / `end_date` (memberships), `paid_at` / `date` (invoices, payments), `bill_date` / `next_bill_date` (membership billing). This is the correct choice in live too — patients are sometimes backdated for compliance, memberships start mid-period, etc.
+
 ## Archived rows are excluded by default
 
 List endpoints filter out archived records by default. Inverse queries:

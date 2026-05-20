@@ -113,11 +113,15 @@ Copy `package.json` and `server.js` from the canonical Node.js template at [`_co
 - Entry file MUST be `server.js` (the platform runs `node server.js`)
 - `package.json` MUST define both a `build` script and a `start` script (the platform runs `npm install && npm run build`, then `node server.js`)
 
-The template's session store is in-memory by default — fine for kicking the tires, fatal for any real app. For production, persist sessions and practice tokens to the auto-provisioned Postgres at `process.env.DATABASE_URL`. See the schema sketch in [`_common/node-template.md`](../_common/node-template.md).
+**Use the auto-provisioned Postgres for session + token storage — don't ship the in-memory default.** The template ships with an in-memory `sessions` + `practiceTokens` map for demo simplicity, but in Hosted Mode that's broken on the very first install: the container handling `POST /hint/connect/:code` is often a different process from the one serving `GET /hint/core_page` a few seconds later (rolling deploys, restarts, multi-process workers), so the session created at connect time is missing when the embedded UI loads → "Practice has not completed headless connect yet." Persist to Postgres at `process.env.DATABASE_URL` from day one. Schema sketch + drop-in `pg` wiring live in [`_common/node-template.md`](../_common/node-template.md).
+
+`DATABASE_URL` may not be reachable on the very first deploy — the sibling Postgres can still be in provisioning when the web service starts serving. Tolerate transient `ECONNREFUSED` on boot: defer schema creation behind a short retry loop (5 attempts × ~2s) instead of crashing the process. Once Postgres is up, the connection sticks.
 
 ### Provider API + JS SDK
 
 The access token from handshake/connect lets the embedded app read practice data. Endpoints, response-shape gotchas, and the in-iframe SDK example all live in [`_common/provider-api.md`](../_common/provider-api.md). Read that before writing any `/api/provider/*` client code or embedding the JS SDK — getting the response shape wrong silently produces empty results.
+
+**Before writing any KPI/metric/dashboard code**, read [`_common/provider-api-fields.md`](../_common/provider-api-fields.md) for the schema sketch + gotchas on the top five resources (patients, memberships, customer_invoices, payments, practitioners). It covers the family-vs-individual membership shape, the `status` vs `enrollment_status` disambiguation, where revenue actually lives (NOT `customer_invoices.charges`), and the sandbox `created_at` quirk that flattens every time-series chart. Skipping this file is the difference between a working v1 and a ship-zero-everywhere v1.
 
 ## Step 4: (Optional) Configure the Deployment Service
 
