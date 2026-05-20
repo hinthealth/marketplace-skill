@@ -14,9 +14,14 @@ The canonical Node.js implementation of the Hint marketplace contract. `create-a
   "scripts": {
     "build": "echo 'no build step'",
     "start": "node server.js"
+  },
+  "dependencies": {
+    "pg": "^8.13.0"
   }
 }
 ```
+
+The `pg` dependency is included by default — Hosted Mode auto-provisions a sibling Postgres, and the template uses it as the session + practice-token store (see below). Self-Hosted Mode apps can swap in their own store, but `pg` is the path of least resistance.
 
 ## `server.js`
 
@@ -63,27 +68,20 @@ const APP_CONFIG = {
 // ============================================================
 
 // ============================================================
-// Session store (in-memory)
+// Session store (Postgres)
 //
-// NOTE: This template stores sessions + practice access tokens in memory
-// for demo simplicity. Every revision deploy is a fresh process and wipes
-// this object — that's fine for kicking the tires, fatal for any real app.
+// Sessions + practice access tokens MUST be persisted across processes.
+// In Hosted Mode the container handling /hint/connect/:code is often a
+// different process from the one serving /hint/<surface> a few seconds
+// later (rolling deploys, restarts, multi-process workers). An in-memory
+// map breaks the very first install with "Practice has not completed
+// headless connect yet" because the connect-side process wrote a token
+// the render-side process can't see.
 //
-// For anything beyond a demo, persist to the Postgres database that Hint
-// auto-provisions alongside this service. The connection string is
-// available at `process.env.DATABASE_URL`. Add `pg` (already in the
-// dependencies) and write a sessions table on boot. Schema sketch:
+// Hosted Mode auto-provisions a sibling Postgres and sets DATABASE_URL.
+// For Self-Hosted apps, set DATABASE_URL yourself (any Postgres works).
 //
-//   CREATE TABLE sessions (
-//     session_key  TEXT PRIMARY KEY,
-//     practice_id  TEXT NOT NULL,
-//     access_token TEXT,
-//     user_data    JSONB,
-//     created_at   TIMESTAMPTZ DEFAULT NOW()
-//   );
-//   CREATE INDEX ON sessions(practice_id);
-//
-// And for any app-specific table:
+// For app-specific tenant data, add tables with a non-null practice_id:
 //
 //   CREATE TABLE messages (
 //     id          SERIAL PRIMARY KEY,
@@ -94,22 +92,77 @@ const APP_CONFIG = {
 //   );
 //   CREATE INDEX ON messages(practice_id);
 // ============================================================
-const sessions = {};
+const { Pool } = require('pg');
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-// Practice-scoped access tokens, keyed by practice_id (from /hint/connect/:code).
-const practiceTokens = {};
+// Ensure the sessions table exists on boot.
+//
+// DATABASE_URL may not be reachable on the very first deploy — the sibling
+// Postgres can still be in provisioning when the web service starts serving.
+// Retry briefly instead of crashing; the server keeps booting and accepting
+// health checks while we wait for Postgres.
+async function ensureSchema(attempt = 1) {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        session_key  TEXT PRIMARY KEY,
+        practice_id  TEXT NOT NULL,
+        access_token TEXT,
+        user_data    JSONB,
+        created_at   TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await pool.query('CREATE INDEX IF NOT EXISTS sessions_practice_id_idx ON sessions(practice_id);');
+    console.log('Sessions schema ready');
+  } catch (err) {
+    if (attempt >= 5) {
+      console.error('Could not initialize sessions schema after 5 attempts:', err.message);
+      return;
+    }
+    console.warn(`Postgres not ready (attempt ${attempt}): ${err.message} — retrying in 2s`);
+    setTimeout(() => ensureSchema(attempt + 1), 2000);
+  }
+}
+ensureSchema();
 
-function requireSession(req, res) {
+async function saveSession(sessionKey, practiceId, userData) {
+  await pool.query(
+    `INSERT INTO sessions (session_key, practice_id, user_data)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (session_key) DO UPDATE
+       SET practice_id = EXCLUDED.practice_id, user_data = EXCLUDED.user_data`,
+    [sessionKey, practiceId, userData],
+  );
+}
+
+async function saveAccessToken(practiceId, accessToken) {
+  // Upsert the access_token onto every session for this practice. In practice
+  // there's usually one active session per practice at a time; this scales to
+  // however many exist.
+  await pool.query(
+    'UPDATE sessions SET access_token = $1 WHERE practice_id = $2',
+    [accessToken, practiceId],
+  );
+}
+
+async function getSession(sessionKey) {
+  const { rows } = await pool.query(
+    'SELECT session_key, practice_id, access_token, user_data FROM sessions WHERE session_key = $1',
+    [sessionKey],
+  );
+  return rows[0] || null;
+}
+
+async function requireSession(req, res) {
   const url = new URL(req.url, `http://localhost:${port}`);
   const sessionKey = req.headers['x-hint-session-key'] || url.searchParams.get('session_key');
-  const session = sessionKey ? sessions[sessionKey] : null;
+  const session = sessionKey ? await getSession(sessionKey) : null;
   if (!session) {
     res.writeHead(401, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'No session' }));
     return null;
   }
-  // Attach the practice's access_token so handlers can call /api/provider/*.
-  return { ...session, access_token: practiceTokens[session.practice_id] || null };
+  return session; // { session_key, practice_id, access_token, user_data }
 }
 
 // ============================================================
@@ -189,13 +242,11 @@ const server = http.createServer(async (req, res) => {
     // Persist the session keyed by sessionKey AND remember practice_id so
     // every subsequent handler can scope reads/writes to it.
     const sessionKey = crypto.randomUUID();
-    sessions[sessionKey] = {
-      practice_id: parsed.practice?.id,        // ← the tenancy anchor; treat as required
+    await saveSession(sessionKey, parsed.practice?.id, {
       user: parsed.user,
       practice: parsed.practice,
       integration: parsed.integration,
-      createdAt: new Date().toISOString(),
-    };
+    });
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ session_key: sessionKey }));
   }
@@ -203,7 +254,7 @@ const server = http.createServer(async (req, res) => {
   // Core page — full-page embedded UI (for core_page surface)
   if (req.method === 'GET' && url.pathname === '/hint/core_page') {
     const sessionKey = url.searchParams.get('session_key');
-    const session = sessions[sessionKey];
+    const session = sessionKey ? await getSession(sessionKey) : null;
     res.writeHead(200, { 'Content-Type': 'text/html' });
     return res.end(renderCorePage(sessionKey, session));
   }
@@ -211,7 +262,7 @@ const server = http.createServer(async (req, res) => {
   // Clinical interaction — patient-context embedded UI (for clinical_interaction surface)
   if (req.method === 'GET' && url.pathname === '/hint/clinical_interaction') {
     const sessionKey = url.searchParams.get('session_key');
-    const session = sessions[sessionKey];
+    const session = sessionKey ? await getSession(sessionKey) : null;
     res.writeHead(200, { 'Content-Type': 'text/html' });
     return res.end(renderClinicalInteraction(sessionKey, session));
   }
@@ -219,7 +270,7 @@ const server = http.createServer(async (req, res) => {
   // Settings — embedded inside the practice settings area (for settings surface)
   if (req.method === 'GET' && url.pathname === '/hint/settings') {
     const sessionKey = url.searchParams.get('session_key');
-    const session = sessions[sessionKey];
+    const session = sessionKey ? await getSession(sessionKey) : null;
     res.writeHead(200, { 'Content-Type': 'text/html' });
     return res.end(renderSettings(sessionKey, session));
   }
@@ -230,11 +281,9 @@ const server = http.createServer(async (req, res) => {
   // uses to call `/api/provider/*` endpoints. It is NOT the same as the
   // partner API key in HINT_API_KEY (which is partner-wide).
   //
-  // Persist `{ partner_id, practice_id, access_token }` keyed by practice
-  // so the embedded UI can authenticate Provider API calls on every render.
-  // The example below just logs it — replace with a real write to your
-  // session/practice store (use the auto-provisioned Postgres at
-  // `process.env.DATABASE_URL` for anything beyond a demo).
+  // We persist the access_token onto every session row for this practice so
+  // the embedded surface can authenticate Provider API calls on every render
+  // (requireSession() returns the row with access_token already attached).
   if (req.method === 'POST' && url.pathname.startsWith('/hint/connect/')) {
     const authCode = url.pathname.replace('/hint/connect/', '');
     try {
@@ -243,11 +292,8 @@ const server = http.createServer(async (req, res) => {
           code: authCode,
           grant_type: 'authorization_code',
         });
-        // The access_token is practice-scoped — persist it keyed by practice_id
-        // so we use the right token per request. The embedded surface looks
-        // this up via requireSession() → practiceTokens[session.practice_id].
         if (resp.body?.practice_id && resp.body?.access_token) {
-          practiceTokens[resp.body.practice_id] = resp.body.access_token;
+          await saveAccessToken(resp.body.practice_id, resp.body.access_token);
         }
       }
     } catch (err) {
@@ -264,9 +310,8 @@ const server = http.createServer(async (req, res) => {
   // and scope queries by session.practice_id. Example:
   //
   //   if (req.method === 'GET' && url.pathname === '/api/messages') {
-  //     const session = requireSession(req, res); if (!session) return;
-  //     // SELECT * FROM messages WHERE practice_id = $1 ORDER BY created_at DESC
-  //     const rows = await db.query(
+  //     const session = await requireSession(req, res); if (!session) return;
+  //     const { rows } = await pool.query(
   //       'SELECT * FROM messages WHERE practice_id = $1 ORDER BY created_at DESC',
   //       [session.practice_id],
   //     );

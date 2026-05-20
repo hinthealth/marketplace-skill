@@ -17,6 +17,7 @@ Fetch and read these before running anything — the audit checks are derived fr
 1. https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/_common/marketplace-contract.md — the routes + signature verification
 2. https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/_common/api-conventions.md — host + auth rules
 3. https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/_common/provider-api.md — the practice-scoped token rule
+4. https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/_common/provider-api-fields.md — field names + status-vs-enrollment_status + revenue-source gotchas (needed if the audit looks at the app's metric/KPI code)
 
 ## Platform URLs
 

@@ -5,6 +5,7 @@ The Provider API is what marketplace apps use to read + write practice data on b
 ## Reading the docs
 
 - **MCP server (recommended for agents)**: `https://developers.hint.com/mcp` — install this and the agent can query endpoint definitions, parameters, response schemas, and example payloads natively. Set it up before exploring the API; it'll save hours, and it's the authoritative way to discover field names and object schemas.
+- **Inline field reference**: [`provider-api-fields.md`](./provider-api-fields.md) — schema sketch + gotchas for the five most-used resources (patients, memberships, customer_invoices, payments, practitioners). Use this when the MCP server isn't available — it's enough to write client code that returns correct numbers instead of guessing field names. Critical for revenue/membership-count metrics: read it before any chart or KPI work.
 - **Browsable reference**: https://developers.hint.com/reference — direct links to specific endpoint pages work well; the index page is JS-rendered so scraping it is unreliable.
 
 ## Authentication

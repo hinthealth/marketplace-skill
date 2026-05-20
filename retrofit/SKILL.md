@@ -18,6 +18,7 @@ Before doing anything, fetch and read these shared fragments — every retrofit 
 1. https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/_common/api-conventions.md — hosts, auth, pagination, reserved env vars
 2. https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/_common/marketplace-contract.md — the three required routes, signature verification, smoke test
 3. https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/_common/provider-api.md — Provider API endpoints, practice-scoped auth, JS SDK
+4. https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/_common/provider-api-fields.md — schema sketch + gotchas for patients, memberships, customer_invoices, payments, practitioners. Fetch before the partner writes any KPI/metric/dashboard code
 
 ## Platform URLs
 
