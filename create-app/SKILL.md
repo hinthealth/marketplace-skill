@@ -179,15 +179,19 @@ curl -s "$HINT_API_URL/api/partner/app/services" \
 
 > The database sibling shows up in this list so partners can see it exists, but `GET /api/partner/app/services/:id` and `PATCH /api/partner/app/services/:id` only accept web service ids — the partner-managed fields (`build_command`, `start_command`, `env_vars`) don't apply to Postgres, so the database id returns 404 on those endpoints.
 
-Save the resulting URL as `$APP_URL`. Then poll it directly until it returns 200 (the build is usually live within a few seconds of `status: pushed`):
+Save the resulting URL as `$APP_URL`. Then poll it directly until it returns 200 — **realistic boot time is 30-60 seconds from `status: pushed`**, not "a few seconds":
 
 ```bash
 curl -s -o /dev/null -w '%{http_code}' $APP_URL/
 ```
 
-Start at a **5-second interval, fall back to 10 seconds** if not live by the second poll. Cap at 5 minutes. Once the health check responds with a 200, the app is live — the service URL is the source of truth.
+Poll every 5 seconds. Cap at 5 minutes — if you don't see a 200 by then, treat it as a real failure (see Troubleshooting → Viewing logs). 502s and "Application failed to respond" during the first minute are normal — the container is still booting. The progression you should expect:
 
-**Expect 502s for the first few seconds after `status: pushed`.** The container is finishing its boot while you're polling. A 502 (or "Application failed to respond") on the first 1-3 polls is normal — treat it as "still booting", not "broken". Only escalate if 502s persist past ~60 seconds, or if you see a 4xx (which indicates a real error, e.g. handshake URL mismatched).
+- t=0s (`status: pushed`): container image is built and pushed; the platform is spinning up the runtime
+- t=10-50s: 502s from the edge while the container is still warming
+- t=30-90s: first 200 — app is live
+
+Only escalate if 502s persist past ~2 minutes, or if you see a 4xx (which indicates a real error, e.g. handshake URL mismatched, missing env var crashing on boot).
 
 If the revision flips to `status: failed`, the platform refused the deploy (typical reasons: partner not yet approved for production deploys; partner product type is not `app`; push failure). Contact Hint support (devsupport@hint.com) with the revision id.
 
@@ -223,13 +227,15 @@ Hold `$APP_URL` — the next step uses it.
 
 ## Step 6: Configure Marketplace Settings
 
-Once `$APP_URL` is known (Hint-provisioned in Hosted Mode, partner-supplied in Self-Hosted Mode), configure the partner for automatic activation and embedding:
+Once `$APP_URL` is known (Hint-provisioned in Hosted Mode, partner-supplied in Self-Hosted Mode), configure the partner for automatic activation and embedding.
 
-> **In managed-hosted mode**, skip the `PATCH /partner/partner` call entirely. For managed partners the integration is created and activated programmatically by Hint (no OAuth/headless handshake fires), so neither `auth_type` nor `redirect_url` is consulted. Jump straight to the `PATCH /partner/app` handshake_url + anchor creation below.
+> **In managed-hosted mode**, the install flow itself does NOT consult `auth_type` or `redirect_url` — the integration is created and activated programmatically by Hint. But the Activation Settings tab in the partner's portal still reads from those fields, and a practice/partner staring at "auth_type: manual (Not Recommended)" right after install will think the skill didn't finish. **Set them anyway** so the UI looks consistent with what actually shipped.
 
 ```bash
 # Set auth type and redirect URL for automatic headless activation
-# (managed-hosted mode: skip this PATCH entirely)
+# In managed-hosted mode this is purely cosmetic for the Activation Settings UI
+# (install fires through a different code path); set it anyway so the tab
+# doesn't read "Not Recommended" right after install.
 curl -s -X PATCH "$HINT_API_URL/api/partner/partner" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
@@ -262,6 +268,34 @@ curl -s -X POST "$HINT_API_URL/api/partner/app/anchors" \
 ```
 
 An app can have one anchor of each type at most (`core_page`, `clinical_interaction`, `settings`) — pick the ones the app actually needs. Most apps register one, complex ones register two or three.
+
+## Step 6.5: Configure the Marketplace Listing
+
+The previous steps set up the **technical contract** (how the app embeds + authenticates). Now configure the **marketplace listing** — the customer-facing card practices see when browsing the marketplace. Without this, the listing renders with placeholder content (name defaults to the partner's sandbox name, summary defaults to "Sandbox Testing", no built-by, no icon) — which looks unfinished even though the app works.
+
+First, find the `partner_product_id`. **`GET /api/partner/partner_products` is gated to most sandbox keys (returns 403)**, so the easiest way to discover it is from the Partner Portal URL bar: open the partner's product in the portal and the path will look like `/partner/products/ppro-XXXXXXXXXX/activation_settings`. Save the `ppro-...` ident.
+
+Alternatively, `GET /api/partner/partner_products/$PRODUCT_ID` works once you have the ident — it's only the list endpoint that 403s.
+
+```bash
+# Replace ppro-XXXXXXXXXX with the product ident from the Partner Portal URL.
+curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"partner_product\": {
+      \"name\": \"<the app name the user gave in question 1>\",
+      \"summary\": \"<a 1-line tagline; derive from the app description or ask the user>\",
+      \"built_by_name\": \"<partner display name, e.g. the partner's company name>\",
+      \"built_by_url\": \"<partner website, optional>\",
+      \"icon\": \"<optional URL to a square icon image>\"
+    }
+  }"
+```
+
+These 5 fields are API-settable. **Other listing fields (Overview, Highlights, Data Syncing, Learn More, Categories, Quotes, hero images, Documents) are UI-only today** — the partner has to fill them in at `app.hint.com` manually. Note this in the summary so the user knows the listing isn't fully programmatic.
+
+The slug used in the marketplace URL is set when the product is first created and **is not editable via API** — if the user wants to rename the URL slug after creation, they have to email [devsupport@hint.com](mailto:devsupport@hint.com).
 
 ## Step 7: Verify & Report
 
@@ -331,6 +365,32 @@ Env var changes hit the deployed service immediately. Build/start command change
 - **"Product type must be app"** — The partner's product type must be `app`. Update it in the Partner Portal.
 - **403 on Partner API write endpoints** — Sandbox keys (`sbx-` prefix) can fully manage the marketplace plumbing (revisions, services, anchors, app + partner settings) but **cannot create or modify business records** (e.g. `POST /api/partner/charges`, `POST /api/partner/practice_charges`). Those endpoints require a production-approved partner — contact [devsupport@hint.com](mailto:devsupport@hint.com) for promotion. If a sandbox key is hitting 403 on a non-business endpoint, the API key may not have the right permissions; double-check it's the partner's own key, not an integration key.
 - **428 "This action requires a Practice" on `/api/provider/*`** — You called a Provider endpoint with the partner-wide `HINT_API_KEY` instead of a practice-scoped access token. Provider endpoints can only be called on behalf of a specific practice — use the access_token from `POST /api/oauth/tokens` (the value persisted during `/hint/connect/:code`). See [`_common/provider-api.md`](../_common/provider-api.md).
-- **Handshake fails with 401** — The webhook secret may not be configured correctly on the deployed service. The partner finds it in the Partner Portal under API Keys → Webhooks Signature Key.
+- **Handshake fails with 401** — Most common cause: `HINT_WEBHOOK_SECRET` on the deployed service doesn't match the partner's current **Webhooks Signature Key** in the Partner Portal (visible under API Keys). If the partner ever rotated that key, the env var on the service is now stale — re-push env vars via `PATCH /api/partner/app/services/:id` to pick up the current value. The template's verifier logs the last 4 chars of the env var on mismatch — compare against the portal's current key.
 - **Headless connect fails** — The API URL env var may not point to the correct Hint API instance.
 - **Embedded page doesn't load** — Verify the anchor exists and the `source_url` matches `$APP_URL` + the correct route for the surface type.
+
+### Viewing logs
+
+Hint's managed deployment platform doesn't expose runtime logs (`stdout`/`stderr` from `node server.js`) to partners through the Partner Portal today. To debug a deployed service, add **instrumented debug routes guarded by an env var** to the app itself. Recommended recipe:
+
+```javascript
+// In server.js, behind a non-secret env-var flag so partners can toggle
+// without re-deploying:
+if (process.env.HINT_DEBUG === 'true' && req.method === 'GET' && url.pathname === '/debug/env') {
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  return res.end(JSON.stringify({
+    HINT_API_URL: HINT_API_URL,
+    HINT_API_KEY_set: Boolean(HINT_API_KEY),
+    HINT_API_KEY_prefix: HINT_API_KEY ? HINT_API_KEY.slice(0, 8) : null,
+    HINT_PARTNER_ID: HINT_PARTNER_ID,
+    HINT_WEBHOOK_SECRET_set: Boolean(HINT_WEBHOOK_SECRET),
+    HINT_WEBHOOK_SECRET_len: HINT_WEBHOOK_SECRET?.length || 0,
+    HINT_WEBHOOK_SECRET_last4: HINT_WEBHOOK_SECRET?.slice(-4) || null,
+    DATABASE_URL_set: Boolean(process.env.DATABASE_URL),
+  }, null, 2));
+}
+```
+
+Push the service with `HINT_DEBUG=true` via `PATCH /api/partner/app/services/:id`, hit `$APP_URL/debug/env` to inspect the actual env, then set `HINT_DEBUG=false` (or remove the var) before declaring the app production-ready. Never expose secret values themselves — only existence/prefix/last-4 for diagnostics.
+
+For business-logic debugging (handshake verification mismatches, connect failures, etc.), the template's handshake verifier and connect handler already log structured diagnostics to `stdout`. Those logs aren't viewable today, but they help future-you when log access ships — for now, augment with `/debug/*` routes that surface the same state via HTTP.
