@@ -107,12 +107,23 @@ async function ensureSchema(attempt = 1) {
       CREATE TABLE IF NOT EXISTS sessions (
         session_key  TEXT PRIMARY KEY,
         practice_id  TEXT NOT NULL,
-        access_token TEXT,
         user_data    JSONB,
         created_at   TIMESTAMPTZ DEFAULT NOW()
       );
     `);
     await pool.query('CREATE INDEX IF NOT EXISTS sessions_practice_id_idx ON sessions(practice_id);');
+    // practice_tokens is keyed by practice_id (NOT session_key) so the connect
+    // handler can write the token even when no session row exists yet. In
+    // managed-hosted mode Hint POSTs /hint/connect/:code BEFORE the user opens
+    // the iframe (handshake), so writing the token onto a not-yet-existing
+    // session row would be a silent no-op. getSession() joins this table.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS practice_tokens (
+        practice_id  TEXT PRIMARY KEY,
+        access_token TEXT NOT NULL,
+        updated_at   TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
     console.log('Sessions schema ready');
   } catch (err) {
     if (attempt >= 5) {
@@ -136,18 +147,23 @@ async function saveSession(sessionKey, practiceId, userData) {
 }
 
 async function saveAccessToken(practiceId, accessToken) {
-  // Upsert the access_token onto every session for this practice. In practice
-  // there's usually one active session per practice at a time; this scales to
-  // however many exist.
+  // Upsert keyed by practice_id so this works regardless of whether a session
+  // row exists yet. Decouples /hint/connect/:code from /hint/handshake ordering.
   await pool.query(
-    'UPDATE sessions SET access_token = $1 WHERE practice_id = $2',
-    [accessToken, practiceId],
+    `INSERT INTO practice_tokens (practice_id, access_token)
+     VALUES ($1, $2)
+     ON CONFLICT (practice_id) DO UPDATE
+       SET access_token = EXCLUDED.access_token, updated_at = NOW()`,
+    [practiceId, accessToken],
   );
 }
 
 async function getSession(sessionKey) {
   const { rows } = await pool.query(
-    'SELECT session_key, practice_id, access_token, user_data FROM sessions WHERE session_key = $1',
+    `SELECT s.session_key, s.practice_id, s.user_data, t.access_token
+       FROM sessions s
+       LEFT JOIN practice_tokens t ON t.practice_id = s.practice_id
+      WHERE s.session_key = $1`,
     [sessionKey],
   );
   return rows[0] || null;
@@ -180,11 +196,35 @@ function parseBody(req) {
 }
 
 function verifySignature(rawBody, signature) {
-  if (!HINT_WEBHOOK_SECRET || !signature) return false;
+  // Hint signs the handshake body with the partner's **webhooks signature key**
+  // (visible in Partner Portal → API Keys → Webhooks Signature Key). The Hosted
+  // Mode deploy platform injects this as `HINT_WEBHOOK_SECRET`. If you ever
+  // rotate that key in the portal, re-push env vars via
+  // `PATCH /api/partner/app/services/:id` so the deployed service picks up the
+  // new value — otherwise the env var goes stale and every handshake fails.
+  if (!HINT_WEBHOOK_SECRET || !signature) {
+    console.error('[handshake] verification skipped:', {
+      hasSecret: Boolean(HINT_WEBHOOK_SECRET),
+      hasSignature: Boolean(signature),
+    });
+    return false;
+  }
   const expected = 'sha256=' + crypto.createHmac('sha256', HINT_WEBHOOK_SECRET).update(rawBody).digest('hex');
   try {
-    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
-  } catch {
+    const ok = crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+    if (!ok) {
+      // Log enough to debug without leaking the secret itself.
+      console.error('[handshake] signature mismatch:', {
+        bodyBytes: Buffer.byteLength(rawBody, 'utf8'),
+        receivedSigPrefix: String(signature).slice(0, 14),
+        expectedSigPrefix: expected.slice(0, 14),
+        secretLast4: HINT_WEBHOOK_SECRET.slice(-4),
+        hint: 'Compare secretLast4 with the last 4 chars of Webhooks Signature Key in Partner Portal. If they differ, the env var is stale (re-push via PATCH /partner/app/services/:id).',
+      });
+    }
+    return ok;
+  } catch (err) {
+    console.error('[handshake] verifier threw:', err.message);
     return false;
   }
 }
@@ -292,8 +332,16 @@ const server = http.createServer(async (req, res) => {
           code: authCode,
           grant_type: 'authorization_code',
         });
-        if (resp.body?.practice_id && resp.body?.access_token) {
-          await saveAccessToken(resp.body.practice_id, resp.body.access_token);
+        // The OAuth response nests practice as an object: { practice: { id, name }, access_token, ... }
+        const practiceId = resp.body?.practice?.id;
+        const accessToken = resp.body?.access_token;
+        if (practiceId && accessToken) {
+          await saveAccessToken(practiceId, accessToken);
+        } else {
+          console.warn('[connect] OAuth response missing practice.id or access_token:', JSON.stringify({
+            status: resp.status,
+            keys: Object.keys(resp.body || {}),
+          }));
         }
       }
     } catch (err) {
@@ -330,6 +378,16 @@ const server = http.createServer(async (req, res) => {
 // ============================================================
 
 function renderCorePage(sessionKey, session) {
+  // Three render states the embedded UI has to handle:
+  //   - ready:      session row + access_token present → render the real app
+  //   - connecting: session row present but access_token still missing
+  //                 (happens for ~seconds-to-minutes between handshake and the
+  //                 connect callback persisting the token; the UI auto-retries)
+  //   - no-session: no session row at all (the user opened the surface URL
+  //                 directly, or the session expired)
+  const userData = session?.user_data || {};
+  const ready = Boolean(session && session.access_token);
+  const connecting = Boolean(session && !session.access_token);
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -343,29 +401,49 @@ function renderCorePage(sessionKey, session) {
     .card { background: #FFFFFF; border: 1px solid #E6ECF4; border-radius: 12px; padding: 24px; max-width: 600px; margin: 0 auto; }
     h1 { font-size: 24px; font-weight: 400; margin-bottom: 8px; }
     .badge { display: inline-block; background: #DCFCE7; color: #00602D; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; vertical-align: middle; }
+    .badge-pending { background: #FEF3C7; color: #92400E; }
     .info { color: #43739E; font-size: 14px; margin-top: 12px; }
     .info p { margin-bottom: 4px; }
+    .pending { color: #43739E; font-size: 14px; margin-top: 12px; line-height: 1.5; }
     .btn-primary { background: #0E68E2; color: #FFFFFF; border: none; border-radius: 8px; padding: 8px 16px; font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; }
     .btn-primary:hover { background: #083C82; }
   </style>
 </head>
 <body>
   <div class="card">
-    <h1>${APP_CONFIG.name} <span class="badge">Connected</span></h1>
-    <div class="info">
-      <p><strong>Session:</strong> ${sessionKey ? 'Active' : 'None'}</p>
-      ${session ? '<p><strong>User:</strong> ' + (session.user?.email || session.user?.id || 'Unknown') + '</p>' : ''}
-      ${session ? '<p><strong>Practice:</strong> ' + (session.practice?.name || session.practice?.id || 'Unknown') + '</p>' : ''}
-    </div>
-    <div id="app" style="margin-top: 20px;">
-      <!-- APP UI GOES HERE -->
-    </div>
+    ${ready ? `
+      <h1>${APP_CONFIG.name} <span class="badge">Connected</span></h1>
+      <div class="info">
+        <p><strong>User:</strong> ${userData.user?.email || userData.user?.id || 'Unknown'}</p>
+        <p><strong>Practice:</strong> ${userData.practice?.name || userData.practice?.id || 'Unknown'}</p>
+      </div>
+      <div id="app" style="margin-top: 20px;">
+        <!-- APP UI GOES HERE -->
+      </div>
+    ` : connecting ? `
+      <h1>${APP_CONFIG.name} <span class="badge badge-pending">Finishing setup</span></h1>
+      <p class="pending">
+        We're finalizing your connection. This usually takes a few seconds — the page
+        will refresh automatically once setup completes.
+      </p>
+    ` : `
+      <h1>${APP_CONFIG.name}</h1>
+      <p class="pending">
+        No active session. Open this app from inside Hint to start.
+      </p>
+    `}
   </div>
   <script src="${HINT_API_URL}/hint-sdk.js"></script>
   <script>
     const SESSION_KEY = '${sessionKey || ''}';
+    const CONNECTING = ${connecting};
     if (typeof HintSDK !== 'undefined') {
       HintSDK.init(() => console.log('HintSDK ready, user:', HintSDK.user));
+    }
+    // Auto-retry while the access token is propagating from /hint/connect/:code
+    // into the session. Stops once the token lands and the next render is ready.
+    if (CONNECTING) {
+      setTimeout(() => window.location.reload(), 3000);
     }
   </script>
 </body>
@@ -402,7 +480,7 @@ function renderClinicalInteraction(sessionKey, session) {
       <!-- CLINICAL INTERACTION UI GOES HERE -->
     </div>
     <div class="info">
-      ${session ? '<p>User: ' + (session.user?.email || 'Unknown') + ' | Practice: ' + (session.practice?.name || 'Unknown') + '</p>' : ''}
+      ${session ? '<p>User: ' + (session.user_data?.user?.email || 'Unknown') + ' | Practice: ' + (session.user_data?.practice?.name || 'Unknown') + '</p>' : ''}
     </div>
   </div>
   <script src="${HINT_API_URL}/hint-sdk.js"></script>
@@ -453,7 +531,7 @@ function renderSettings(sessionKey, session) {
     <button onclick="alert('Save not yet wired')">Save</button>
   </div>
   <div class="info">
-    ${session ? '<p>Practice: ' + (session.practice?.name || 'Unknown') + '</p>' : ''}
+    ${session ? '<p>Practice: ' + (session.user_data?.practice?.name || 'Unknown') + '</p>' : ''}
   </div>
   <script src="${HINT_API_URL}/hint-sdk.js"></script>
 </body>
