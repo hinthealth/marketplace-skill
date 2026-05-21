@@ -185,7 +185,7 @@ Save the resulting URL as `$APP_URL`. Then poll it directly until it returns 200
 curl -s -o /dev/null -w '%{http_code}' $APP_URL/
 ```
 
-Poll every 5 seconds. Cap at 5 minutes — if you don't see a 200 by then, treat it as a real failure (see Troubleshooting → Viewing logs). 502s and "Application failed to respond" during the first minute are normal — the container is still booting. The progression you should expect:
+Poll every 5 seconds. Cap at 5 minutes — if you don't see a 200 by then, treat it as a real failure and contact [devsupport@hint.com](mailto:devsupport@hint.com) with the revision id (runtime logs aren't viewable by partners today; Hint support can read them server-side). 502s and "Application failed to respond" during the first minute are normal — the container is still booting. The progression you should expect:
 
 - t=0s (`status: pushed`): container image is built and pushed; the platform is spinning up the runtime
 - t=10-50s: 502s from the edge while the container is still warming
@@ -371,7 +371,9 @@ Env var changes hit the deployed service immediately. Build/start command change
 
 ### Viewing logs
 
-Hint's managed deployment platform doesn't expose runtime logs (`stdout`/`stderr` from `node server.js`) to partners through the Partner Portal today. To debug a deployed service, add **instrumented debug routes guarded by an env var** to the app itself. Recommended recipe:
+Hint's managed deployment platform does NOT expose runtime logs (`stdout`/`stderr` from `node server.js`) to partners through the Partner Portal today. If the app fails to boot at all (never returns 200), partners can't read the crash trace themselves — contact [devsupport@hint.com](mailto:devsupport@hint.com) with the service id; Hint can read logs server-side.
+
+For runtime issues on an app that IS running (handshake mismatches, connect errors, env-var inspection), add **instrumented debug routes guarded by an env var** to the app itself. Recommended recipe:
 
 ```javascript
 // In server.js, behind a non-secret env-var flag so partners can toggle
