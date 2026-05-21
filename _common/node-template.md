@@ -332,9 +332,8 @@ const server = http.createServer(async (req, res) => {
           code: authCode,
           grant_type: 'authorization_code',
         });
-        // The OAuth response shape nests practice as an object: { practice: { id, name }, access_token, ... }
-        // `practice_id` is kept as a forward-compat fallback in case the API exposes a flat field later.
-        const practiceId = resp.body?.practice?.id || resp.body?.practice_id;
+        // The OAuth response nests practice as an object: { practice: { id, name }, access_token, ... }
+        const practiceId = resp.body?.practice?.id;
         const accessToken = resp.body?.access_token;
         if (practiceId && accessToken) {
           await saveAccessToken(practiceId, accessToken);
