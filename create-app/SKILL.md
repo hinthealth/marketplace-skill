@@ -273,9 +273,14 @@ An app can have one anchor of each type at most (`core_page`, `clinical_interact
 
 The previous steps set up the **technical contract** (how the app embeds + authenticates). Now configure the **marketplace listing** — the customer-facing card practices see when browsing the marketplace. Without this, the listing renders with placeholder content (name defaults to the partner's sandbox name, summary defaults to "Sandbox Testing", no built-by, no icon) — which looks unfinished even though the app works.
 
-First, find the `partner_product_id`. **`GET /api/partner/partner_products` is gated to most sandbox keys (returns 403)**, so the easiest way to discover it is from the Partner Portal URL bar: open the partner's product in the portal and the path will look like `/partner/products/ppro-XXXXXXXXXX/activation_settings`. Save the `ppro-...` ident.
+First, find the `partner_product_id`:
 
-Alternatively, `GET /api/partner/partner_products/$PRODUCT_ID` works once you have the ident — it's only the list endpoint that 403s.
+```bash
+curl -s "$HINT_API_URL/api/partner/partner_products" \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+Returns a bare JSON array. Most partners have exactly one product; pick the first entry's `id` (looks like `ppro-XXXXXXXXXX`) and save it as `$PRODUCT_ID`. If the partner has multiple products, match by `name` against the one the user just built. The Partner Portal URL bar (`/partner/products/ppro-XXXXXXXXXX/activation_settings`) also exposes the ident as a fallback if the API call is unavailable for any reason.
 
 ```bash
 # Replace ppro-XXXXXXXXXX with the product ident from the Partner Portal URL.
