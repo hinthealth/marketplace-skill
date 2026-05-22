@@ -80,7 +80,7 @@ Hint sets these automatically on every Hosted-Mode deploy. Self-Hosted Mode apps
 
 | `service_type` | `service_url` | `build_command`/`start_command`/`env_vars` | Show/update via `/api/partner/app/services/:id` |
 |---|---|---|---|
-| `web` | the deployed URL | partner-managed | yes |
+| `web` | the deployed URL (typically `https://<service-ident>.hintapps.com`) | partner-managed | yes |
 | `database` | `null` | not applicable (managed by Hint) | **404** — the partner-managed endpoints reject database service ids |
 
 When the skill needs `$APP_URL`, filter by `service_type: 'web'` and pick `service_url`. Don't iterate `s.get('service_url')` heuristically — that worked before but is fragile and gets confused by `provisioning_failed` stub rows. Filter on `service_type` AND `status: 'active'` for the canonical pick.
