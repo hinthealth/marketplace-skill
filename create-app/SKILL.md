@@ -6,7 +6,7 @@ Build and deploy a fully working partner app to the Hint marketplace. This skill
 
 Set `$HINT_API_URL=https://api.hint.com` for both sandbox and live work (Partner Portal at `https://app.hint.com`). Full conventions: [`_common/api-conventions.md`](../_common/api-conventions.md).
 
-**IMPORTANT**: Don't name underlying infrastructure providers, code hosts, or background-worker systems in any user-facing copy you generate (READMEs, install instructions, error messages, descriptions). Refer to the platform as "Hint" — the Hint API, Hint Partner Portal, Hint's managed deployment platform. The deployed service URL itself is what it is (currently a third-party hostname); don't pretend otherwise, just don't volunteer the provider's name in things you write.
+**IMPORTANT**: Don't name underlying infrastructure providers, code hosts, or background-worker systems in any user-facing copy you generate (READMEs, install instructions, error messages, descriptions). Refer to the platform as "Hint" — the Hint API, Hint Partner Portal, Hint's managed deployment platform. Deployed services live at `<service-ident>.hintapps.com` — a Hint-owned domain — so the URL itself doesn't leak the underlying provider.
 
 ## Getting Started
 
