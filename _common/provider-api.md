@@ -21,10 +21,14 @@ Authorization: Bearer <practice_access_token>
 
 ## Endpoint discovery
 
-Use the MCP server (above) for the canonical list of available endpoints, parameters, and response schemas. Two gotchas worth knowing up-front:
+Use the MCP server (above) for the canonical list of available endpoints, parameters, and response schemas. A few gotchas worth knowing up-front:
 
 - **There is no `GET /api/provider/charges`** as a top-level resource. Charges are nested under invoices: `GET /api/provider/customer_invoices/:id/charges`, or inline them via `GET /api/provider/customer_invoices?expand=charges`. A bare `/charges` returns 404.
 - **There is no `GET /api/provider/invoices`** — partners usually want `customer_invoices` (patient-facing invoices), or `practice_invoices` (what the practice owes Hint).
+- **`/api/provider/users` and `/api/provider/practitioners` are NOT the same list.** They overlap but model different concepts and carry different fields, so picking the wrong one means the app silently has the wrong data even when the endpoint returns rows. Pick by what the app actually needs:
+  - **`/users`** — staff accounts that can log into the Hint dashboard for the practice (admins, billing staff, schedulers, clinicians who happen to log in). Useful when the app needs "who has portal access" or "list users for an in-app permission picker". `/users` often returns `[]` in fresh sandboxes simply because no one has signed up yet — that's not the only reason to prefer `/practitioners`.
+  - **`/practitioners`** — clinicians at the practice with credentialing identity: NPI, specialty, billing identity, signature-on-file, schedule-able. This is what shows up on encounters, what gets attributed in billing, what patients book with. Use this for "list doctors at this practice", "attribute revenue to a clinician", "render the visit-notes author dropdown".
+  - The two overlap when a credentialed clinician also has a portal login — but a practitioner without a login is still a practitioner, and a staff user without credentials is not a practitioner. Don't conflate them.
 
 ## Response conventions
 
@@ -38,14 +42,27 @@ For surfaces that need real-time practice context (current patient, current inte
 <script src="$HINT_API_URL/hint-sdk.js"></script>
 <script>
   HintSDK.init(() => {
-    console.log('User:', HintSDK.user);              // { id, name, email, partner_roles }
-    console.log('Patient:', HintSDK.currentPatient); // { id, name } or null
-    console.log('Interaction:', HintSDK.interaction); // { id } or null
-  });
-  HintSDK.onCurrentPatientChanged((patient) => {
-    // Update UI when the selected patient changes
+    // Ready — fields below are populated.
   });
 </script>
 ```
 
 The SDK runs inside the iframe Hint embeds, so the host it's served from must match the `$HINT_API_URL` the app is integrated with.
+
+### API surface
+
+| Member | Type | Notes |
+|---|---|---|
+| `HintSDK.init(callback)` | function | Pass a callback that fires once the SDK has connected to the host. All other members are unsafe to read before `init` resolves. |
+| `HintSDK.user` | object | `{ id, name, email, partner_roles }`. The currently signed-in staff user; `partner_roles` is an array of role-name strings (matching whatever the partner configured under `partner_roles` in their App config). |
+| `HintSDK.currentPatient` | object \| null | `{ id, name }` if the user is viewing a patient (clinical_interaction / core_page surfaces); `null` otherwise. |
+| `HintSDK.interaction` | object \| null | `{ id }` if the surface is a clinical interaction; `null` otherwise. Most `core_page` and `settings` surfaces will see `null` here. |
+| `HintSDK.onCurrentPatientChanged(callback)` | function | Subscribes to current-patient updates. Callback receives the new patient object (or `null`). Use this when the surface needs to react to the user switching charts without reloading. |
+
+`HintSDK.currentPatient` is the only field that changes after `init`; `user` and `interaction` are fixed for the lifetime of the surface. Critical for `clinical_interaction` apps that need to follow the chart selection — without `onCurrentPatientChanged`, the surface will stale-render the patient it was opened with.
+
+## What partner apps cannot match exactly
+
+There are a handful of UI-side numbers in Hint that partner apps cannot perfectly reproduce from the public API. Don't chase the gap — flag it to the partner upfront.
+
+- **Active Members KPI**: Hint's UI count and the API count typically differ by 3–5% because Hint's KPI excludes a few edge cases (very-recent activations, in-flight cancellations) that the public API surfaces. See [`provider-api-fields.md`](./provider-api-fields.md) under memberships for the exact field/scope detail. Apps that want a "matches the UI exactly" number should defer to Hint's reporting, not reconstruct it client-side.

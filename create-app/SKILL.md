@@ -179,7 +179,7 @@ curl -s "$HINT_API_URL/api/partner/app/services" \
 
 > The database sibling shows up in this list so partners can see it exists, but `GET /api/partner/app/services/:id` and `PATCH /api/partner/app/services/:id` only accept web service ids — the partner-managed fields (`build_command`, `start_command`, `env_vars`) don't apply to Postgres, so the database id returns 404 on those endpoints.
 
-Save the resulting URL as `$APP_URL`. Then poll it directly until it returns 200 — **realistic boot time is 30-60 seconds from `status: pushed`**, not "a few seconds":
+Save the resulting URL as `$APP_URL`. Then poll it directly until it returns 200 — **realistic boot time is 30–90 seconds from `status: pushed`**, not "a few seconds":
 
 ```bash
 curl -s -o /dev/null -w '%{http_code}' $APP_URL/
@@ -298,9 +298,26 @@ curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID" \
   }"
 ```
 
-These 5 fields are API-settable. **Other listing fields (Overview, Highlights, Data Syncing, Learn More, Categories, Quotes, hero images, Documents) are UI-only today** — the partner has to fill them in at `app.hint.com` manually. Note this in the summary so the user knows the listing isn't fully programmatic.
+These 5 fields cover the listing card. **Overview, Highlights, Quotes, Categories, Links, and Preconditions are also partner-settable** via their own per-section endpoints — use the [`fill-listing`](https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/fill-listing/SKILL.md) skill for the guided workflow, or hit `/api/partner/partner_products/$PRODUCT_ID/{overview|highlights|quotes|categories|links|preconditions}` directly. Pricing and install Requirements are NOT partner-settable — those are hinter-curated decisions; email [devsupport@hint.com](mailto:devsupport@hint.com) to change them.
 
-The slug used in the marketplace URL is set when the product is first created and **is not editable via API** — if the user wants to rename the URL slug after creation, they have to email [devsupport@hint.com](mailto:devsupport@hint.com).
+The `slug` and `type` fields are set when the product is first created and **are not editable via API** afterwards — if the user wants to rename the URL slug or change product type after creation, they have to email [devsupport@hint.com](mailto:devsupport@hint.com).
+
+### Product status lifecycle
+
+`partner_product.status` is read-only for partners (admin-curated). Values, in rough lifecycle order:
+
+| Status | Meaning |
+|---|---|
+| `unpublished` | Default state at creation. Blocked from install — practices can't install yet. Most new products sit here while content is being filled in. |
+| `researching` | Hint is internally evaluating the product. Not visible in marketplace browse. |
+| `coming_soon` | Pre-launch placeholder. May be visible with a "coming soon" badge. |
+| `beta` | Limited availability — visible in marketplace browse but flagged as beta. Practices can install. |
+| `live` | Fully launched. Default state for an active marketplace listing. |
+| `sunsetting` | Being phased out. Still installable but flagged. |
+| `deprecated` | No longer recommended. Existing installs continue working; new installs are blocked. |
+| `decommissioned` | Gone. Hidden from marketplace browse. |
+
+Status transitions are handled by Hint admins, not partners. The relevant ones for a new partner are: `unpublished` (after create) → `beta` or `live` (after Hint reviews and approves the listing). Email [devsupport@hint.com](mailto:devsupport@hint.com) when ready to move to `beta` or `live`.
 
 ## Step 7: Verify & Report
 
