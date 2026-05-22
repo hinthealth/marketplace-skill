@@ -84,7 +84,7 @@ external, external_type                  // true if recorded outside Hint
 
 ## Practitioner — `GET /provider/practitioners`
 
-**Use `/practitioners`, not `/users`.** `/provider/users` returns `[]` in fresh sandboxes and is rarely what an app actually wants.
+**Practitioners are NOT the same as users.** A practitioner is a credentialed clinician (NPI, specialty, billing identity, panel_size, schedulable) — the entity who appears on encounters and gets attributed in billing. A `/provider/users` row is a portal login, possibly held by a non-clinician. The two overlap when a clinician also logs in but the lists model different concepts: a credentialed practitioner without a portal account is still a practitioner; a staff user without credentials is not. Use `/practitioners` whenever the app cares about clinical attribution, visit authorship, or "doctors at this practice." Reach for `/users` only when the app specifically wants "who has portal access."
 
 ```
 id, name, email, bio, photo_url,

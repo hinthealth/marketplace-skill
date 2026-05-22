@@ -14,6 +14,44 @@ Every Hint marketplace app — regardless of stack or hosting — has to impleme
 
 The deployed app reads `HINT_API_URL`, `HINT_API_KEY`, `HINT_PARTNER_ID`, `HINT_WEBHOOK_SECRET`, and (optionally) `DATABASE_URL` from `process.env` (or the equivalent in its language). Hint sets them automatically on Hosted-Mode services; Self-Hosted Mode apps set them themselves at deploy time. Full descriptions: see [`api-conventions.md` § Reserved env vars](./api-conventions.md#reserved-env-vars).
 
+## Handshake payload shape
+
+After signature verification, parse `request.body` as JSON. Top-level field reference:
+
+| Path | Type | Notes |
+|---|---|---|
+| `timestamp` | integer | Unix seconds at the moment Hint signed the request. The signature covers the body, including this, so it doubles as a replay-defense nonce — reject requests with a `timestamp` older than a few minutes if you want strict freshness. |
+| `practice.id` | string | Public id for the practice (e.g. `prc-xxxx`). Use this as the tenancy key for everything the app stores on behalf of this practice. |
+| `practice.name` | string | Display name. Safe to render in UI. |
+| `user.id` | string | Public id of the signed-in staff user. |
+| `user.email` | string | Login email. |
+| `user.name` / `user.first_name` / `user.last_name` | string | Display name parts. |
+| `user.phones` | object[] | Array of phone records (`{ id, ... }`). May be empty. |
+| `user.partner_roles` | string[] | Roles the partner assigned to this user under their App config. Use these for in-app RBAC; they're separate from Hint's practice-level permissions. |
+| `integration.id` | string | The Hint integration record's id. Persist for support / debugging. |
+| `access_token` | string | **Session-scoped api key minted for THIS embed session.** Use this to call `/api/provider/*` from the app instead of the practice-wide OAuth token where possible — see the section below. |
+| `access_context` | string | Either `standard` (normal staff user) or `platform_support` (a Hint admin acting on the practice's behalf, e.g. for support). Apps may want to render a "viewing as Hint support" banner when this is `platform_support`. |
+| `patient.id` | string | Only on `clinical_interaction` and `clinical_chart` surfaces — public id of the patient being viewed. |
+| `interaction.id` | string | Only on `clinical_interaction` surfaces — public id of the open clinical interaction. |
+
+The payload may carry additional fields over time. Decode permissively (ignore unknowns); only require the fields the app actually reads.
+
+### Use the handshake's `access_token` to call the Provider API
+
+The `access_token` Hint includes in the handshake body is a **session-scoped api key** generated specifically for the lifetime of this embed session. Its scope is the same practice + user that the handshake identifies, so for any `/api/provider/*` calls the app needs to make WHILE this surface is mounted, prefer it:
+
+```
+Authorization: Bearer <handshake.access_token>
+```
+
+This is preferable to the longer-lived practice OAuth access token (obtained via `POST /hint/connect/:code`) because:
+
+- It's automatic — every handshake mints a fresh one; no separate exchange step.
+- Its lifetime is the embed session, not the practice's lifetime — leaks die quickly.
+- It carries the acting user's identity, so server-side audit logs attribute correctly.
+
+Use the OAuth practice token (the one stored under `practice_id` after `/hint/connect/:code`) only for **server-to-server work that happens outside an embed session** — webhooks, scheduled jobs, async fanout to other practices. For "the embedded surface is open and needs to read /provider/patients", the handshake token is the right tool.
+
 ## Signature verification
 
 `POST /hint/handshake` MUST verify the request signature before doing anything else. Pseudocode:
