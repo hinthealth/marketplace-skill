@@ -28,7 +28,7 @@ Set `$HINT_API_URL=https://api.hint.com` for both sandbox and live work (Partner
 Ask the partner:
 
 1. **Partner API key** — sandbox (`sbx-...`) or live. The audit runs against whichever environment the key belongs to.
-2. **App URL (optional)** — if the partner already knows their `$APP_URL`, save it. Otherwise the audit will discover it from `GET /partner/app/services`.
+2. **App URL (optional)** — if the partner already knows their `$APP_URL`, save it. Otherwise the audit will discover it from `GET /partner/partner_products/:partner_product_id/app/services`.
 3. **Webhooks signature key (optional)** — needed for the "valid signature accepted" probe. Find it in the Partner Portal under **API Keys → Webhooks Signature Key**. Without it, the audit can still run all the negative tests (forged signature, no signature) — just not the positive one.
 
 Verify the key works:
@@ -42,18 +42,26 @@ If this returns anything other than 200, stop and report the auth issue.
 
 ## Step 2: Inventory the App's Hint-Side State
 
+First look up the partner's product — every app endpoint is scoped to a `partner_product`:
+
+```bash
+curl -s "$HINT_API_URL/api/partner/partner_products" -H "Authorization: Bearer $API_KEY"
+```
+
+Pick the first entry (or match by name if there are multiple) and save its `id` as `$PRODUCT_ID`. Then:
+
 ```bash
 # Partner-level config
 curl -s "$HINT_API_URL/api/partner/partner" -H "Authorization: Bearer $API_KEY"
 
 # App-level config (handshake URL + role mappings)
-curl -s "$HINT_API_URL/api/partner/app" -H "Authorization: Bearer $API_KEY"
+curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app" -H "Authorization: Bearer $API_KEY"
 
 # Anchors (per-surface source URLs)
-curl -s "$HINT_API_URL/api/partner/app/anchors" -H "Authorization: Bearer $API_KEY"
+curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anchors" -H "Authorization: Bearer $API_KEY"
 
 # Services (deployed URLs, env vars, build/start commands)
-curl -s "$HINT_API_URL/api/partner/app/services" -H "Authorization: Bearer $API_KEY"
+curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/services" -H "Authorization: Bearer $API_KEY"
 ```
 
 Each of these returns a JSON document (services + anchors are bare arrays). Collect them — they're the inputs for the rest of the audit.
@@ -61,7 +69,7 @@ Each of these returns a JSON document (services + anchors are bare arrays). Coll
 If `$APP_URL` wasn't provided, pick the row with `service_type: 'web'` and `status: "active"`. The list also contains an auto-provisioned Postgres sibling (`service_type: 'database'`, `service_url: null`) — filter it out:
 
 ```bash
-APP_URL=$(curl -s "$HINT_API_URL/api/partner/app/services" -H "Authorization: Bearer $API_KEY" \
+APP_URL=$(curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/services" -H "Authorization: Bearer $API_KEY" \
   | python3 -c "import sys,json; print(next((s['service_url'] for s in json.load(sys.stdin) if s.get('service_type')=='web' and s.get('status')=='active' and s.get('service_url')),''))")
 ```
 
@@ -137,10 +145,10 @@ PASS: every URL is https or localhost-with-localhost-mode. FAIL: any plain http 
 
 ### 3.7 Env-var hygiene
 
-For each service in `GET /partner/app/services` with `service_type: 'web'`, fetch the full record:
+For each service in `GET /partner/partner_products/$PRODUCT_ID/app/services` with `service_type: 'web'`, fetch the full record:
 
 ```bash
-curl -s "$HINT_API_URL/api/partner/app/services/$SERVICE_ID" -H "Authorization: Bearer $API_KEY"
+curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/services/$SERVICE_ID" -H "Authorization: Bearer $API_KEY"
 ```
 
 Inspect the response's `env_vars` (jsonb object of partner-supplied custom vars). Reserved keys MUST NOT appear there:
@@ -223,9 +231,9 @@ INFO / PASS:
 
 Remediation:
   - 3.3: Audit POST /hint/handshake handler. Confirm raw body is captured before JSON parsing and constant-time HMAC compare is used. See _common/marketplace-contract.md.
-  - 3.6: PATCH /partner/app/anchors/<anchor_id> with source_url starting in https://, or enable localhost_mode for development.
+  - 3.6: PATCH /partner/partner_products/$PRODUCT_ID/app/anchors/<anchor_id> with source_url starting in https://, or enable localhost_mode for development.
   - 3.1: PATCH /partner/partner -d '{"partner":{"email":"..."}}'.
-  - 3.8: PATCH /partner/app/anchors/<anchor_id> -d '{"anchor":{"settings_label":"..."}}'.
+  - 3.8: PATCH /partner/partner_products/$PRODUCT_ID/app/anchors/<anchor_id> -d '{"anchor":{"settings_label":"..."}}'.
 ```
 
 ## Step 5: Severity Levels

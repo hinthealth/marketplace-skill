@@ -6,7 +6,7 @@ Audits the partner's existing application against the Hint marketplace contract 
 
 The partner already has a working web app and wants to surface it inside Hint. Two flavors:
 
-- **Hosted by Hint**: the partner's code lives in their repo; Hint deploys it on Hint-managed infrastructure. After retrofit, push via `POST /partner/app/revisions`. Hosted mode runs `node server.js` and currently supports Node.js only — other stacks must go Self-hosted.
+- **Hosted by Hint**: the partner's code lives in their repo; Hint deploys it on Hint-managed infrastructure. After retrofit, push via `POST /partner/partner_products/:partner_product_id/app/revisions`. Hosted mode runs `node server.js` and currently supports Node.js only — other stacks must go Self-hosted.
 - **Self-hosted**: the partner already deploys the app themselves (Vercel, AWS, on-prem). After retrofit, the partner redeploys on their own infra and registers the URLs with Hint. Any stack works.
 
 If the partner is starting from a blank repo, use [`create-app`](https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/create-app/SKILL.md) instead — that skill scaffolds from a known-good template.
@@ -43,7 +43,14 @@ curl -s "$HINT_API_URL/api/partner/partner" \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-The response's `product.type` must be `app`. If it isn't, stop and tell the partner to contact [devsupport@hint.com](mailto:devsupport@hint.com) to get the partner type updated.
+Then look up the partner's product — every app endpoint is scoped to a `partner_product`:
+
+```bash
+curl -s "$HINT_API_URL/api/partner/partner_products" \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+Returns a bare JSON array. Most partners have exactly one product; save the first entry's `id` (looks like `ppro-XXXXXXXXXX`) as `$PRODUCT_ID`. The product's `type` field must be `app`. If it isn't, stop and tell the partner to contact [devsupport@hint.com](mailto:devsupport@hint.com) to get the product type updated.
 
 ## Step 2: Inventory the Existing App
 
@@ -201,12 +208,12 @@ Zip the repo and POST it as a revision (same as `create-app`'s Hosted Mode Step 
 
 ```bash
 cd <repo_dir> && zip -r /tmp/retrofit-deploy.zip . -x ".git/*" -x "node_modules/*" -x ".env"
-curl -s -X POST "$HINT_API_URL/api/partner/app/revisions" \
+curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/revisions" \
   -H "Authorization: Bearer $API_KEY" \
   -F "code_archive=@/tmp/retrofit-deploy.zip;type=application/zip"
 ```
 
-Save the revision id, poll `GET /api/partner/app/revisions` until `status: pushed`, then poll `GET /api/partner/app/services` for the row with `service_type: 'web'` and `status: "active"`. Save that `service_url` as `$APP_URL`. The list also contains an auto-provisioned Postgres sibling (`service_type: 'database'`, `service_url: null`) — skip it.
+Save the revision id, poll `GET /api/partner/partner_products/$PRODUCT_ID/app/revisions` until `status: pushed`, then poll `GET /api/partner/partner_products/$PRODUCT_ID/app/services` for the row with `service_type: 'web'` and `status: "active"`. Save that `service_url` as `$APP_URL`. The list also contains an auto-provisioned Postgres sibling (`service_type: 'database'`, `service_url: null`) — skip it.
 
 **Pre-deploy checklist for Hosted Mode:**
 - The entry file MUST be `server.js` if Node.js (Hint's start command is `node server.js`).
@@ -229,13 +236,13 @@ curl -s -X PATCH "$HINT_API_URL/api/partner/partner" \
   -H "Content-Type: application/json" \
   -d "{\"partner\": {\"auth_type\": \"automatic_headless\", \"redirect_url\": \"$APP_URL/hint/connect/\"}}"
 
-curl -s -X PATCH "$HINT_API_URL/api/partner/app" \
+curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d "{\"app\": {\"handshake_url\": \"$APP_URL/hint/handshake\"}}"
 
 # Create one anchor per surface the app implements. Examples:
-curl -s -X POST "$HINT_API_URL/api/partner/app/anchors" \
+curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anchors" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d "{\"anchor\": {\"type\": \"core_page\", \"source_url\": \"$APP_URL/hint/core_page\"}}"

@@ -66,13 +66,23 @@ curl -s "$HINT_API_URL/api/partner/partner" \
 From the response, extract whichever of these are present (fresh sandbox partners may not have all of them populated):
 - `name` — partner name (often empty on a brand-new sandbox; the partner can set it later via `PATCH /partner/partner`)
 - `slug` — URL-safe identifier; may be absent on fresh sandboxes
-- `product.type` — should be `app` for marketplace apps. If the field is missing or null, treat that as "not yet configured" — ask the partner to confirm with Hint support that their partner has been set up as an app-type product, then continue. Don't hard-fail; an absent product is a setup-state quirk, not a wrong-product error.
 
-If POST/PATCH calls later return "Partner product type must be app", that's the firm rejection — at that point the partner type genuinely needs admin attention before deploying. **In managed-hosted mode, the practice can't fix this themselves** — point them at [devsupport@hint.com](mailto:devsupport@hint.com).
+Then look up the partner's product — every app endpoint is scoped to a `partner_product`, so you need its id before doing anything else:
+
+```bash
+curl -s "$HINT_API_URL/api/partner/partner_products" \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+Returns a bare JSON array. Most partners have exactly one product; pick the first entry and save its `id` (looks like `ppro-XXXXXXXXXX`) as `$PRODUCT_ID`. If the partner has multiple products, match by `name` against the app the user is building. The Partner Portal URL bar (`/partner/products/ppro-XXXXXXXXXX/activation_settings`) also exposes the ident as a fallback.
+
+From the product row, also check `type` — should be `app` for marketplace apps. If the field is missing or not `app`, treat that as "not yet configured": ask the partner to confirm with Hint support that their product has been set up as an app-type, then continue. Don't hard-fail; an absent/wrong type is a setup-state quirk, not an immediate error.
+
+If POST/PATCH calls later return "Partner product type must be app", that's the firm rejection — at that point the product type genuinely needs admin attention before deploying. **In managed-hosted mode, the practice can't fix this themselves** — point them at [devsupport@hint.com](mailto:devsupport@hint.com).
 
 Also check if the app already exists:
 ```bash
-curl -s "$HINT_API_URL/api/partner/app" \
+curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app" \
   -H "Authorization: Bearer $API_KEY"
 ```
 
@@ -80,7 +90,7 @@ curl -s "$HINT_API_URL/api/partner/app" \
 
 If no app exists:
 ```bash
-curl -s -X POST "$HINT_API_URL/api/partner/app" \
+curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json"
 ```
@@ -128,7 +138,7 @@ The access token from handshake/connect lets the embedded app read practice data
 If the app needs custom environment variables (third-party API keys, feature flags, etc.) or a different build/start command, create the service explicitly first:
 
 ```bash
-curl -s -X POST "$HINT_API_URL/api/partner/app/services" \
+curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/services" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -146,7 +156,7 @@ Save the `id` from the response. If the app doesn't need custom config, **skip t
 
 The reserved env vars `HINT_API_URL`, `HINT_API_KEY`, `HINT_PARTNER_ID`, `HINT_WEBHOOK_SECRET`, and `DATABASE_URL` are managed by Hint and always present — partner-supplied values for those keys are ignored. See [`_common/api-conventions.md`](../_common/api-conventions.md#reserved-env-vars).
 
-To update config on an existing service later: `PATCH /api/partner/app/services/<id>` with the same body shape. Env var changes propagate immediately; `build_command` / `start_command` changes take effect on the next revision deploy.
+To update config on an existing service later: `PATCH /api/partner/partner_products/$PRODUCT_ID/app/services/<id>` with the same body shape. Env var changes propagate immediately; `build_command` / `start_command` changes take effect on the next revision deploy.
 
 ## Step 5: Deploy
 
@@ -154,17 +164,17 @@ Zip the app and POST it as a revision. If no service exists yet, the first deplo
 
 ```bash
 cd <app_dir> && zip -r /tmp/app-deploy.zip .
-curl -s -X POST "$HINT_API_URL/api/partner/app/revisions" \
+curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/revisions" \
   -H "Authorization: Bearer $API_KEY" \
   -F "code_archive=@/tmp/app-deploy.zip;type=application/zip"
 ```
 
 The response contains the revision row: `{ "id": "prev-...", "status": "pending", ... }`. Save the revision id as `$REV_ID`.
 
-Poll the revision until `status` flips from `pending` to `pushed` (extracted + pushed — usually ~5s) or `failed`. `GET /api/partner/app/revisions` returns a **bare JSON array**, so handle it directly:
+Poll the revision until `status` flips from `pending` to `pushed` (extracted + pushed — usually ~5s) or `failed`. `GET /api/partner/partner_products/$PRODUCT_ID/app/revisions` returns a **bare JSON array**, so handle it directly:
 
 ```bash
-curl -s "$HINT_API_URL/api/partner/app/revisions" \
+curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/revisions" \
   -H "Authorization: Bearer $API_KEY" \
   | python3 -c "import sys,json; print(next((r['status'] for r in json.load(sys.stdin) if r['id']=='$REV_ID'),'?'))"
 ```
@@ -172,12 +182,12 @@ curl -s "$HINT_API_URL/api/partner/app/revisions" \
 Once status is `pushed`, get the service URL. The services list is a bare array containing both the partner-managed web app AND the auto-provisioned Postgres sibling (and occasionally a stub from a prior provision attempt). **Filter by `service_type: 'web'` + `status: "active"`** — the database row has `service_type: 'database'` and `service_url: null`:
 
 ```bash
-curl -s "$HINT_API_URL/api/partner/app/services" \
+curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/services" \
   -H "Authorization: Bearer $API_KEY" \
   | python3 -c "import sys,json; print(next((s['service_url'] for s in json.load(sys.stdin) if s.get('service_type')=='web' and s.get('status')=='active' and s.get('service_url')),''))"
 ```
 
-> The database sibling shows up in this list so partners can see it exists, but `GET /api/partner/app/services/:id` and `PATCH /api/partner/app/services/:id` only accept web service ids — the partner-managed fields (`build_command`, `start_command`, `env_vars`) don't apply to Postgres, so the database id returns 404 on those endpoints.
+> The database sibling shows up in this list so partners can see it exists, but `GET /api/partner/partner_products/$PRODUCT_ID/app/services/:id` and `PATCH /api/partner/partner_products/$PRODUCT_ID/app/services/:id` only accept web service ids — the partner-managed fields (`build_command`, `start_command`, `env_vars`) don't apply to Postgres, so the database id returns 404 on those endpoints.
 
 Save the resulting URL as `$APP_URL`. Then poll it directly until it returns 200 — **realistic boot time is 30–90 seconds from `status: pushed`**, not "a few seconds":
 
@@ -242,26 +252,26 @@ curl -s -X PATCH "$HINT_API_URL/api/partner/partner" \
   -d "{\"partner\": {\"auth_type\": \"automatic_headless\", \"redirect_url\": \"$APP_URL/hint/connect/\"}}"
 
 # Set handshake URL
-curl -s -X PATCH "$HINT_API_URL/api/partner/app" \
+curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d "{\"app\": {\"handshake_url\": \"$APP_URL/hint/handshake\"}}"
 
 # Create anchor — use the surface type chosen by the user
 # For core_page:
-curl -s -X POST "$HINT_API_URL/api/partner/app/anchors" \
+curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anchors" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d "{\"anchor\": {\"type\": \"core_page\", \"source_url\": \"$APP_URL/hint/core_page\"}}"
 
 # For clinical_interaction:
-curl -s -X POST "$HINT_API_URL/api/partner/app/anchors" \
+curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anchors" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d "{\"anchor\": {\"type\": \"clinical_interaction\", \"source_url\": \"$APP_URL/hint/clinical_interaction\"}}"
 
 # For settings:
-curl -s -X POST "$HINT_API_URL/api/partner/app/anchors" \
+curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anchors" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d "{\"anchor\": {\"type\": \"settings\", \"source_url\": \"$APP_URL/hint/settings\", \"settings_label\": \"<App Name> Settings\"}}"
@@ -273,17 +283,9 @@ An app can have one anchor of each type at most (`core_page`, `clinical_interact
 
 The previous steps set up the **technical contract** (how the app embeds + authenticates). Now configure the **marketplace listing** — the customer-facing card practices see when browsing the marketplace. Without this, the listing renders with placeholder content (name defaults to the partner's sandbox name, summary defaults to "Sandbox Testing", no built-by, no icon) — which looks unfinished even though the app works.
 
-First, find the `partner_product_id`:
+Reuse `$PRODUCT_ID` from Step 1.
 
 ```bash
-curl -s "$HINT_API_URL/api/partner/partner_products" \
-  -H "Authorization: Bearer $API_KEY"
-```
-
-Returns a bare JSON array. Most partners have exactly one product; pick the first entry's `id` (looks like `ppro-XXXXXXXXXX`) and save it as `$PRODUCT_ID`. If the partner has multiple products, match by `name` against the one the user just built. The Partner Portal URL bar (`/partner/products/ppro-XXXXXXXXXX/activation_settings`) also exposes the ident as a fallback if the API call is unavailable for any reason.
-
-```bash
-# Replace ppro-XXXXXXXXXX with the product ident from the Partner Portal URL.
 curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
@@ -360,16 +362,16 @@ Hint Marketplace App Set Up!
 **Hosted Mode** — re-run the deploy:
 ```bash
 cd <app_dir> && zip -r /tmp/app-deploy.zip .
-curl -s -X POST "$HINT_API_URL/api/partner/app/revisions" \
+curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/revisions" \
   -H "Authorization: Bearer $API_KEY" \
   -F "code_archive=@/tmp/app-deploy.zip;type=application/zip"
 ```
 
-Poll the revision list (`GET /api/partner/app/revisions`) until the new revision flips to `pushed`, then poll `$APP_URL/` for a 200.
+Poll the revision list (`GET /api/partner/partner_products/$PRODUCT_ID/app/revisions`) until the new revision flips to `pushed`, then poll `$APP_URL/` for a 200.
 
 To change config (env vars, build/start command) on an existing service:
 ```bash
-curl -s -X PATCH "$HINT_API_URL/api/partner/app/services/$SERVICE_ID" \
+curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/services/$SERVICE_ID" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"service": {"env_vars": {"FEATURE_FLAG_X": "false"}}}'
@@ -387,7 +389,7 @@ Env var changes hit the deployed service immediately. Build/start command change
 - **"Product type must be app"** — The partner's product type must be `app`. Update it in the Partner Portal.
 - **403 on Partner API write endpoints** — Sandbox keys (`sbx-` prefix) can fully manage the marketplace plumbing (revisions, services, anchors, app + partner settings) but **cannot create or modify business records** (e.g. `POST /api/partner/charges`, `POST /api/partner/practice_charges`). Those endpoints require a production-approved partner — contact [devsupport@hint.com](mailto:devsupport@hint.com) for promotion. If a sandbox key is hitting 403 on a non-business endpoint, the API key may not have the right permissions; double-check it's the partner's own key, not an integration key.
 - **428 "This action requires a Practice" on `/api/provider/*`** — You called a Provider endpoint with the partner-wide `HINT_API_KEY` instead of a practice-scoped access token. Provider endpoints can only be called on behalf of a specific practice — use the access_token from `POST /api/oauth/tokens` (the value persisted during `/hint/connect/:code`). See [`_common/provider-api.md`](../_common/provider-api.md).
-- **Handshake fails with 401** — Most common cause: `HINT_WEBHOOK_SECRET` on the deployed service doesn't match the partner's current **Webhooks Signature Key** in the Partner Portal (visible under API Keys). If the partner ever rotated that key, the env var on the service is now stale — re-push env vars via `PATCH /api/partner/app/services/:id` to pick up the current value. The template's verifier logs the last 4 chars of the env var on mismatch — compare against the portal's current key.
+- **Handshake fails with 401** — Most common cause: `HINT_WEBHOOK_SECRET` on the deployed service doesn't match the partner's current **Webhooks Signature Key** in the Partner Portal (visible under API Keys). If the partner ever rotated that key, the env var on the service is now stale — re-push env vars via `PATCH /api/partner/partner_products/$PRODUCT_ID/app/services/:id` to pick up the current value. The template's verifier logs the last 4 chars of the env var on mismatch — compare against the portal's current key.
 - **Headless connect fails** — The API URL env var may not point to the correct Hint API instance.
 - **Embedded page doesn't load** — Verify the anchor exists and the `source_url` matches `$APP_URL` + the correct route for the surface type.
 
@@ -415,6 +417,6 @@ if (process.env.HINT_DEBUG === 'true' && req.method === 'GET' && url.pathname ==
 }
 ```
 
-Push the service with `HINT_DEBUG=true` via `PATCH /api/partner/app/services/:id`, hit `$APP_URL/debug/env` to inspect the actual env, then set `HINT_DEBUG=false` (or remove the var) before declaring the app production-ready. Never expose secret values themselves — only existence/prefix/last-4 for diagnostics.
+Push the service with `HINT_DEBUG=true` via `PATCH /api/partner/partner_products/$PRODUCT_ID/app/services/:id`, hit `$APP_URL/debug/env` to inspect the actual env, then set `HINT_DEBUG=false` (or remove the var) before declaring the app production-ready. Never expose secret values themselves — only existence/prefix/last-4 for diagnostics.
 
 For business-logic debugging (handshake verification mismatches, connect failures, etc.), the template's handshake verifier and connect handler already log structured diagnostics to `stdout`. Those logs aren't viewable today, but they help future-you when log access ships — for now, augment with `/debug/*` routes that surface the same state via HTTP.
