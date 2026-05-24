@@ -74,8 +74,8 @@ Hint sets these automatically on every Hosted-Mode deploy. Self-Hosted Mode apps
 | `HINT_WEBHOOK_SECRET` | Used to verify the `X-Hint-Signature` header on `POST /hint/handshake`. The partner finds this in the Partner Portal under **API Keys → Webhooks Signature Key**. |
 | `DATABASE_URL` | Postgres connection string (only present when the auto-provisioned sibling database is connectable). |
 
-## Services and the Postgres sibling live at separate endpoints
+## Services list contains only web services
 
 `GET /api/partner/partner_products/:partner_product_id/app/services` returns the partner-managed web services (the ones running the partner's code). Pick the row with `status: 'active'` and read `service_url` for `$APP_URL`. Most apps have exactly one web service.
 
-The auto-provisioned Postgres sibling that backs `DATABASE_URL` lives at its own endpoint: `GET /api/partner/partner_products/:partner_product_id/app/database` (singular — at most one per app). It returns `{ id, status }` only; the connection string is delivered via the `DATABASE_URL` env var, never via the API. A 404 here means Postgres hasn't been provisioned yet (it provisions on first `POST .../app/services`).
+The auto-provisioned Postgres sibling that backs `DATABASE_URL` is managed entirely by Hint and is not exposed via the API. The connection string is delivered via the `DATABASE_URL` env var injected into the web service.

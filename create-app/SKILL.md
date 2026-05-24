@@ -187,12 +187,7 @@ curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/services" \
   | python3 -c "import sys,json; print(next((s['service_url'] for s in json.load(sys.stdin) if s.get('status')=='active' and s.get('service_url')),''))"
 ```
 
-The auto-provisioned Postgres sibling that backs `DATABASE_URL` lives at `GET /api/partner/partner_products/$PRODUCT_ID/app/database` (singular). Most apps don't need to query it directly — the connection string is injected via the `DATABASE_URL` env var. Check it only if you need to confirm provisioning status:
-
-```bash
-curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/database" \
-  -H "Authorization: Bearer $API_KEY"
-```
+The auto-provisioned Postgres sibling that backs `DATABASE_URL` is managed entirely by Hint and isn't exposed via the API. The connection string is injected as the `DATABASE_URL` env var on the web service.
 
 Save the resulting URL as `$APP_URL`. Then poll it directly until it returns 200 — **realistic boot time is 30–90 seconds from `status: pushed`**, not "a few seconds":
 

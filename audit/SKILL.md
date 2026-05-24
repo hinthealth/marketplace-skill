@@ -62,12 +62,9 @@ curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anchors" -H 
 
 # Services (deployed URLs, env vars, build/start commands)
 curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/services" -H "Authorization: Bearer $API_KEY"
-
-# Database (auto-provisioned Postgres sibling; 404 if not provisioned yet)
-curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/database" -H "Authorization: Bearer $API_KEY"
 ```
 
-Each of these returns a JSON document (services + anchors are bare arrays; database is a single object or 404). Collect them — they're the inputs for the rest of the audit.
+Each of these returns a JSON document (services + anchors are bare arrays). Collect them — they're the inputs for the rest of the audit.
 
 If `$APP_URL` wasn't provided, pick the row with `status: "active"` from the services list:
 
