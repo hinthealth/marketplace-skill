@@ -195,7 +195,7 @@ Save the resulting URL as `$APP_URL`. Then poll it directly until it returns 200
 curl -s -o /dev/null -w '%{http_code}' $APP_URL/
 ```
 
-Poll every 5 seconds. Cap at 5 minutes — if you don't see a 200 by then, treat it as a real failure and contact [devsupport@hint.com](mailto:devsupport@hint.com) with the revision id (runtime logs aren't viewable by partners today; Hint support can read them server-side). 502s and "Application failed to respond" during the first minute are normal — the container is still booting. The progression you should expect:
+Poll every 5 seconds. Cap at 5 minutes — if you don't see a 200 by then, treat it as a real failure. Pull the runtime logs to see why (`GET /api/partner/partner_products/$PRODUCT_ID/app/services/:id/logs`, or in the Partner Portal under the service row's "View logs" button — see [Viewing logs](#viewing-logs) below). Escalate to [devsupport@hint.com](mailto:devsupport@hint.com) with the revision id only if the logs aren't conclusive. 502s and "Application failed to respond" during the first minute are normal — the container is still booting. The progression you should expect:
 
 - t=0s (`status: pushed`): container image is built and pushed; the platform is spinning up the runtime
 - t=10-50s: 502s from the edge while the container is still warming
@@ -395,9 +395,13 @@ Env var changes hit the deployed service immediately. Build/start command change
 
 ### Viewing logs
 
-Hint's managed deployment platform does NOT expose runtime logs (`stdout`/`stderr` from `node server.js`) to partners through the Partner Portal today. If the app fails to boot at all (never returns 200), partners can't read the crash trace themselves — contact [devsupport@hint.com](mailto:devsupport@hint.com) with the service id; Hint can read logs server-side.
+Runtime `stdout`/`stderr` from `node server.js` is now visible to partners. Use whichever surface fits the task:
 
-For runtime issues on an app that IS running (handshake mismatches, connect errors, env-var inspection), add **instrumented debug routes guarded by an env var** to the app itself. Recommended recipe:
+- **Partner API** (programmatic): `GET /api/partner/partner_products/$PRODUCT_ID/app/services/:id/logs` returns the last hour of entries by default. Each entry has `timestamp`, `message`, `type` (`app` / `request` / `build`), `level` (`info` / `warning` / `error`), and — for `type=request` — `path`, `method`, `status_code`. Pass-through query params (`type`, `level`, `text`, `limit`, `direction`, `start_time`, `end_time`) filter and paginate.
+- **Partner Portal** (visual): under each service row on `/partner/products/$PRODUCT_ID/custom_app`, click **View logs** for a Render-style console with color-coded status badges, day separators, and a **Tail** toggle for live streaming (polls every 2 s and appends new entries).
+- **Live tail in scripts**: poll `GET …/logs?direction=forward&start_time=<lastSeenTimestamp>` every couple seconds; dedupe by `timestamp`.
+
+For deeper inspection of the env on a running service (e.g. handshake-secret last-4 verification), keeping **instrumented debug routes guarded by an env var** in the app is still useful — they let you inspect what the container ACTUALLY has at runtime, not just what was pushed via the API. Recommended recipe:
 
 ```javascript
 // In server.js, behind a non-secret env-var flag so partners can toggle
@@ -419,4 +423,4 @@ if (process.env.HINT_DEBUG === 'true' && req.method === 'GET' && url.pathname ==
 
 Push the service with `HINT_DEBUG=true` via `PATCH /api/partner/partner_products/$PRODUCT_ID/app/services/:id`, hit `$APP_URL/debug/env` to inspect the actual env, then set `HINT_DEBUG=false` (or remove the var) before declaring the app production-ready. Never expose secret values themselves — only existence/prefix/last-4 for diagnostics.
 
-For business-logic debugging (handshake verification mismatches, connect failures, etc.), the template's handshake verifier and connect handler already log structured diagnostics to `stdout`. Those logs aren't viewable today, but they help future-you when log access ships — for now, augment with `/debug/*` routes that surface the same state via HTTP.
+For business-logic debugging (handshake verification mismatches, connect failures, etc.), the template's handshake verifier and connect handler already log structured diagnostics to `stdout` — those show up directly in the logs view above, so a failing handshake is now traceable end-to-end from the portal.
