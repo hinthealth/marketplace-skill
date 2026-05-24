@@ -213,7 +213,7 @@ curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/revi
   -F "code_archive=@/tmp/retrofit-deploy.zip;type=application/zip"
 ```
 
-Save the revision id, poll `GET /api/partner/partner_products/$PRODUCT_ID/app/revisions` until `status: pushed`, then poll `GET /api/partner/partner_products/$PRODUCT_ID/app/services` for the row with `service_type: 'web'` and `status: "active"`. Save that `service_url` as `$APP_URL`. The list also contains an auto-provisioned Postgres sibling (`service_type: 'database'`, `service_url: null`) — skip it.
+Save the revision id, poll `GET /api/partner/partner_products/$PRODUCT_ID/app/revisions` until `status: pushed`, then poll `GET /api/partner/partner_products/$PRODUCT_ID/app/services` for the row with `status: "active"`. Save that `service_url` as `$APP_URL`. The Postgres sibling lives at its own endpoint (`GET .../app/database`) — most retrofits don't need to query it directly since `DATABASE_URL` is injected via env var.
 
 **Pre-deploy checklist for Hosted Mode:**
 - The entry file MUST be `server.js` if Node.js (Hint's start command is `node server.js`).

@@ -179,15 +179,20 @@ curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/revisions" \
   | python3 -c "import sys,json; print(next((r['status'] for r in json.load(sys.stdin) if r['id']=='$REV_ID'),'?'))"
 ```
 
-Once status is `pushed`, get the service URL. The services list is a bare array containing both the partner-managed web app AND the auto-provisioned Postgres sibling (and occasionally a stub from a prior provision attempt). **Filter by `service_type: 'web'` + `status: "active"`** — the database row has `service_type: 'database'` and `service_url: null`:
+Once status is `pushed`, get the service URL. The services list is a bare array of the partner-managed web service(s). Pick the row with `status: "active"`:
 
 ```bash
 curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/services" \
   -H "Authorization: Bearer $API_KEY" \
-  | python3 -c "import sys,json; print(next((s['service_url'] for s in json.load(sys.stdin) if s.get('service_type')=='web' and s.get('status')=='active' and s.get('service_url')),''))"
+  | python3 -c "import sys,json; print(next((s['service_url'] for s in json.load(sys.stdin) if s.get('status')=='active' and s.get('service_url')),''))"
 ```
 
-> The database sibling shows up in this list so partners can see it exists, but `GET /api/partner/partner_products/$PRODUCT_ID/app/services/:id` and `PATCH /api/partner/partner_products/$PRODUCT_ID/app/services/:id` only accept web service ids — the partner-managed fields (`build_command`, `start_command`, `env_vars`) don't apply to Postgres, so the database id returns 404 on those endpoints.
+The auto-provisioned Postgres sibling that backs `DATABASE_URL` lives at `GET /api/partner/partner_products/$PRODUCT_ID/app/database` (singular). Most apps don't need to query it directly — the connection string is injected via the `DATABASE_URL` env var. Check it only if you need to confirm provisioning status:
+
+```bash
+curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/database" \
+  -H "Authorization: Bearer $API_KEY"
+```
 
 Save the resulting URL as `$APP_URL`. Then poll it directly until it returns 200 — **realistic boot time is 30–90 seconds from `status: pushed`**, not "a few seconds":
 
