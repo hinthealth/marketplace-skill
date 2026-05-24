@@ -76,9 +76,9 @@ Hint sets these automatically on every Hosted-Mode deploy. Self-Hosted Mode apps
 
 ## Services list contains both the web app and a Postgres sibling
 
-`GET /api/partner/app/services` returns a bare array with **two rows per Hosted-Mode app**: the partner-managed web service (the one running the partner's code) and an auto-provisioned Postgres sibling that backs `DATABASE_URL`. They're distinguished by `service_type`:
+`GET /api/partner/partner_products/:partner_product_id/app/services` returns a bare array with **two rows per Hosted-Mode app**: the partner-managed web service (the one running the partner's code) and an auto-provisioned Postgres sibling that backs `DATABASE_URL`. They're distinguished by `service_type`:
 
-| `service_type` | `service_url` | `build_command`/`start_command`/`env_vars` | Show/update via `/api/partner/app/services/:id` |
+| `service_type` | `service_url` | `build_command`/`start_command`/`env_vars` | Show/update via `/api/partner/partner_products/:partner_product_id/app/services/:id` |
 |---|---|---|---|
 | `web` | the deployed URL (typically `https://<service-ident>.hintapps.com`) | partner-managed | yes |
 | `database` | `null` | not applicable (managed by Hint) | **404** — the partner-managed endpoints reject database service ids |
