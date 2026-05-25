@@ -63,7 +63,7 @@ GET /api/provider/memberships?updated_at[gt]=2026-05-22T18:00:00Z
 GET /api/provider/patients?updated_at[gt]=2026-05-22T18:00:00Z
 ```
 
-Pair with a Postgres-backed snapshot table keyed by `practice_id` and a `last_fetched_at` cursor: read the cached snapshot for instant render, fire `updated_at[gt]=<last_fetched_at>` to fetch only the delta, merge, and update the cursor. For correctness, also do a full backstop fetch once per 24 h per practice in case any deltas were missed. See the (forthcoming) `_common/caching-patterns.md` for the full recipe.
+Pair with a Postgres-backed snapshot table keyed by `practice_id` and a `last_fetched_at` cursor: read the cached snapshot for instant render, fire `updated_at[gt]=<last_fetched_at>` to fetch only the delta, merge, and update the cursor. For correctness, also do a full backstop fetch once per 24 h per practice in case any deltas were missed. See [`_common/caching-patterns.md`](./caching-patterns.md) for the full recipe (snapshot table + snapshot-first render + delta refresh + 24 h backstop + per-practice and global advisory locks + HTML fragment swap on the client).
 
 ## Hint JS SDK
 

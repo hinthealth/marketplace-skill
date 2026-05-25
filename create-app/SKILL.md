@@ -117,7 +117,7 @@ Copy `package.json` and `server.js` from the canonical Node.js template at [`_co
 
 1. Replace `APP_NAME_HERE` with the app name.
 2. Replace `SURFACE_TYPE_HERE` with `core_page`, `clinical_interaction`, or `settings`.
-3. Customize the matching renderer (`renderCorePage`, `renderClinicalInteraction`, or `renderSettings`) with the app's actual UI — apply tokens from [`_common/brand-styles.md`](../_common/brand-styles.md) so the embedded surface looks native inside Hint.
+3. Customize the matching renderer (`renderCorePage`, `renderClinicalInteraction`, or `renderSettings`) with the app's actual UI — apply tokens from [`_common/brand-styles.md`](../_common/brand-styles.md) so the embedded surface looks native inside Hint. **Include the responsive baseline + empty-state copy patterns from the same file** — marketplace apps are routinely opened on tablets and phones, and every fresh install hits at least one "no data yet" state. Both are documented as drop-in snippets.
 4. Add app-specific API routes in the marked section. Every handler that touches tenant data MUST call `requireSession(req, res)` and scope queries by `session.practice_id`.
 
 **Required filenames + scripts (the deploy platform runs them literally):**
@@ -133,6 +133,8 @@ Copy `package.json` and `server.js` from the canonical Node.js template at [`_co
 The access token from handshake/connect lets the embedded app read practice data. Endpoints, response-shape gotchas, and the in-iframe SDK example all live in [`_common/provider-api.md`](../_common/provider-api.md). Read that before writing any `/api/provider/*` client code or embedding the JS SDK — getting the response shape wrong silently produces empty results.
 
 **Before writing any KPI/metric/dashboard code**, read [`_common/provider-api-fields.md`](../_common/provider-api-fields.md) for the schema sketch + gotchas on the top five resources (patients, memberships, customer_invoices, payments, practitioners). It covers the family-vs-individual membership shape, the `status` vs `enrollment_status` disambiguation, where revenue actually lives (NOT `customer_invoices.charges`), and the sandbox `created_at` quirk that flattens every time-series chart. Skipping this file is the difference between a working v1 and a ship-zero-everywhere v1.
+
+**If the app summarizes data across a patient panel** (lab worklists, MRR dashboards, overdue-payment views — any Core Page surface that fans out beyond a single patient), also read [`_common/caching-patterns.md`](../_common/caching-patterns.md) before writing the fetch loop. Without a snapshot + delta + 24 h backstop pattern, an ~80-member panel takes 8–25 s to cold-load and routinely trips detail-endpoint rate limits. The recipe is ~150 lines of Postgres + JS and is the difference between "works in demo" and "scales to real practices".
 
 ## Step 4: (Optional) Configure the Deployment Service
 
