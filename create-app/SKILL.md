@@ -74,7 +74,7 @@ curl -s "$HINT_API_URL/api/partner/partner_products" \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-Returns a bare JSON array. Most partners have exactly one product; pick the first entry and save its `id` (looks like `ppro-XXXXXXXXXX`) as `$PRODUCT_ID`. If the partner has multiple products, match by `name` against the app the user is building. The Partner Portal URL bar (`/partner/products/ppro-XXXXXXXXXX/activation_settings`) also exposes the ident as a fallback.
+Returns a bare JSON array. Most partners have exactly one product; pick the first entry and save its `id` (looks like `ppro-XXXXXXXXXX`) as `$PRODUCT_ID`. Also save its `slug` as `$PRODUCT_SLUG` — Step 6 uses it to build the post-activation redirect URL for full-page apps (`https://app.hint.com/apps/$PRODUCT_SLUG`). If the partner has multiple products, match by `name` against the app the user is building. The Partner Portal URL bar (`/partner/products/ppro-XXXXXXXXXX/activation_settings`) also exposes the ident as a fallback.
 
 From the product row, also check `type` — should be `app` for marketplace apps. If the field is missing or not `app`, treat that as "not yet configured": ask the partner to confirm with Hint support that their product has been set up as an app-type, then continue. Don't hard-fail; an absent/wrong type is a setup-state quirk, not an immediate error.
 
@@ -241,7 +241,9 @@ Once `$APP_URL` is known (Hint-provisioned in Hosted Mode, partner-supplied in S
 
 > **In managed-hosted mode**, the install flow itself does NOT consult `auth_type` or `redirect_url` — the integration is created and activated programmatically by Hint. But the Activation Settings tab in the partner's portal still reads from those fields, and a practice/partner staring at "auth_type: manual (Not Recommended)" right after install will think the skill didn't finish. **Set them anyway** so the UI looks consistent with what actually shipped.
 
-**`post_activation_redirect_url` — only set when the app has a `core_page` anchor.** After a practice activates a partner app, Hint navigates the user to whatever this field points at. For a full-page app (Core Page anchor) the natural destination is the deployed app itself — set it to `$APP_URL` so activation lands the practice owner directly on their newly installed app. For a `clinical_interaction`-only (or `settings`-only) app there is no standalone landing surface — those embed inside a specific clinical or settings context — so leave the field unset and Hint stays on its default post-activation screen. Mixed surfaces that include `core_page`: set it.
+**`post_activation_redirect_url` — only set when the app has a `core_page` anchor.** After a practice activates a partner app, Hint navigates the user to whatever this field points at. For a full-page app (Core Page anchor) the natural destination is `https://app.hint.com/apps/$PRODUCT_SLUG` — the practice-facing route that opens the installed app inside Hint's UI (renders the Core Page anchor in-portal). Without this field set, every full-page install lands the practice owner back on the marketplace listing page they just came from, which is dead weight when the user's intent is "use the app now". For a `clinical_interaction`-only (or `settings`-only) app there is no standalone landing surface — those embed inside a specific clinical or settings context — so leave the field unset and Hint stays on its default post-activation screen. Mixed surfaces that include `core_page`: set it.
+
+> **Requires `$PRODUCT_SLUG`** from Step 1. If the product's `slug` was `null` (fresh sandbox), set one before this PATCH — either via the marketplace listing setup in Step 6.5 or by asking devsupport. Without a slug, `/apps/<slug>` has no public URL to point at.
 
 ```bash
 # Set auth type and redirect URL for automatic headless activation
@@ -259,7 +261,7 @@ curl -s -X PATCH "$HINT_API_URL/api/partner/partner" \
   -d "{\"partner\": {
         \"auth_type\": \"automatic_headless\",
         \"redirect_url\": \"$APP_URL/hint/connect/\",
-        \"post_activation_redirect_url\": \"$APP_URL\"
+        \"post_activation_redirect_url\": \"https://app.hint.com/apps/$PRODUCT_SLUG\"
       }}"
 
 # ---- Variant B: clinical_interaction-only or settings-only (no full-page surface) ----
