@@ -229,7 +229,20 @@ function verifySignature(rawBody, signature) {
   }
 }
 
+// Partner-wide calls (server-to-server) — uses the static HINT_API_KEY.
+// Examples: /api/partner/*, /api/oauth/tokens.
 function hintApi(method, path, body) {
+  return hintApiWith(`Bearer ${HINT_API_KEY}`, method, path, body, { parseJson: true });
+}
+
+// Practice-scoped calls — uses the per-practice access_token from the
+// /hint/connect/:code OAuth flow. Use this for any /api/provider/* call;
+// the access_token lives on the session row (see requireSession).
+function hintApiAs(accessToken, method, path, body) {
+  return hintApiWith(`Bearer ${accessToken}`, method, path, body, { parseJson: false });
+}
+
+function hintApiWith(authHeader, method, path, body, { parseJson }) {
   return new Promise((resolve, reject) => {
     const url = new URL(HINT_API_URL + path);
     const proto = url.protocol === 'https:' ? https : http;
@@ -239,7 +252,7 @@ function hintApi(method, path, body) {
       path: url.pathname + url.search,
       method,
       headers: {
-        'Authorization': `Bearer ${HINT_API_KEY}`,
+        'Authorization': authHeader,
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
@@ -248,12 +261,18 @@ function hintApi(method, path, body) {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
-        try { resolve({ status: res.statusCode, body: JSON.parse(data) }); }
-        catch { resolve({ status: res.statusCode, body: data }); }
+        if (parseJson) {
+          try { resolve({ status: res.statusCode, headers: res.headers, body: JSON.parse(data) }); }
+          catch { resolve({ status: res.statusCode, headers: res.headers, body: data }); }
+        } else {
+          // Proxy use case — pass the body through verbatim so the client gets
+          // the same payload it would have received calling Hint directly.
+          resolve({ status: res.statusCode, headers: res.headers, body: data });
+        }
       });
     });
     req.on('error', reject);
-    if (body) req.write(JSON.stringify(body));
+    if (body) req.write(typeof body === 'string' ? body : JSON.stringify(body));
     req.end();
   });
 }
@@ -349,6 +368,48 @@ const server = http.createServer(async (req, res) => {
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ status: 'connected' }));
+  }
+
+  // ============================================================
+  // PROVIDER API PROXY — /hint/api/provider/*
+  //
+  // Forwards browser-side calls to Hint's /api/provider/* with the practice's
+  // session access_token attached server-side. Client code NEVER sees the
+  // access_token — fetch('/hint/api/provider/patients') from the embedded UI
+  // is the right pattern; fetch('https://api.hint.com/api/provider/patients')
+  // (direct, unauthed) is wrong and will 401.
+  //
+  // The client just needs to send the session_key (in the x-hint-session-key
+  // header or as a ?session_key=... query param) so this server can look up
+  // the access_token on the session row.
+  // ============================================================
+  if (url.pathname.startsWith('/hint/api/provider/')) {
+    const session = await requireSession(req, res); if (!session) return;
+    if (!session.access_token) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({
+        error: 'Practice has not completed headless connect yet — try again in a moment.',
+      }));
+    }
+    // /hint/api/provider/patients?limit=10 → /api/provider/patients?limit=10
+    const targetPath = url.pathname.replace('/hint/api', '/api') + (url.search || '');
+    let forwardBody = '';
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      const parsed = await parseBody(req);
+      forwardBody = parsed.raw;
+    }
+    try {
+      const upstream = await hintApiAs(session.access_token, req.method, targetPath, forwardBody);
+      // Pass through the upstream status + Content-Type so the client sees the
+      // same response shape it would get calling Hint directly.
+      const contentType = (upstream.headers && upstream.headers['content-type']) || 'application/json';
+      res.writeHead(upstream.status, { 'Content-Type': contentType });
+      return res.end(upstream.body);
+    } catch (err) {
+      console.error('[hint-api proxy] forward failed:', err.message);
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'Upstream Hint API request failed' }));
+    }
   }
 
   // ============================================================
@@ -548,3 +609,30 @@ server.listen(port, () => console.log(APP_CONFIG.name + ' listening on ' + port)
 3. Customize the matching renderer (`renderCorePage`, `renderClinicalInteraction`, or `renderSettings`) with the app's actual UI. Use the tokens from [`brand-styles.md`](./brand-styles.md) so the embedded surface looks native inside Hint.
 4. Add app-specific API routes (e.g. `/api/messages`, `/api/pets`) in the marked section. Every handler that touches tenant data MUST call `requireSession(req, res)` and scope queries by `session.practice_id`.
 5. Add any app-specific client-side JavaScript in the HTML.
+
+## Calling Hint's Provider API from the embedded UI
+
+The `/hint/api/provider/*` proxy is built into the template — **always call Hint's Provider API through it from client-side code, never directly.**
+
+```js
+// ✅ RIGHT — client calls the local proxy, server injects auth, response forwarded back
+async function fetchPatients() {
+  const r = await fetch('/hint/api/provider/patients?limit=10', {
+    headers: { 'x-hint-session-key': SESSION_KEY },
+  });
+  if (!r.ok) throw new Error('fetch failed: ' + r.status);
+  return r.json();
+}
+
+// ❌ WRONG — direct call from the browser has no auth header, every request 401s
+async function fetchPatientsBroken() {
+  const r = await fetch(`${HINT_API_URL}/api/provider/patients?limit=10`);
+  return r.json(); // → 401 Unauthorized
+}
+```
+
+Why: the `access_token` for `/api/provider/*` is **practice-scoped** and lives on the session row (Postgres). The browser never has it (and shouldn't — exposing it would let any page on the embed origin act as the practice). The proxy looks the token up from `session.access_token` server-side, forwards the upstream call with `Authorization: Bearer <access_token>`, and returns the response. Path mapping is straight: `/hint/api/provider/X` → `https://api.hint.com/api/provider/X`. Query strings, request bodies, and HTTP methods all pass through unchanged.
+
+When the proxy returns **`503 "Practice has not completed headless connect yet"`**, it means the session row exists but the access_token hasn't landed yet — the connect callback is still in flight. Retry once after a couple of seconds.
+
+For server-to-server calls (background jobs, webhook handlers) that don't have a practice session, use `hintApi(method, path, body)` (server-side helper, partner-wide `HINT_API_KEY`) instead. The proxy is for in-browser code that's acting on behalf of the currently-loaded practice.

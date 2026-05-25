@@ -19,6 +19,27 @@ Authorization: Bearer <practice_access_token>
 
 **428 means you used the wrong key.** If a `/api/provider/*` call returns `428 Precondition Required` ("This action requires a Practice"), you sent the partner-wide `HINT_API_KEY` instead of a practice-scoped access token. The partner API key cannot call `/api/provider/*` directly — every provider call has to be on behalf of a specific practice, scoped via the access token. The 428 is the platform refusing to act without that scope.
 
+### Calling `/api/provider/*` from the embedded UI — use the local proxy
+
+When the embedded surface (Core Page, Clinical Interaction, etc.) needs to call a Provider endpoint **from the browser**, do NOT call `https://api.hint.com/api/provider/...` directly — the browser has no access token (and shouldn't; exposing it would let any page on the embed origin act as the practice). Every such direct call returns `401`.
+
+Instead, route through the template's `/hint/api/provider/*` proxy:
+
+```js
+// ✅ RIGHT — local proxy, server attaches the practice's access_token
+fetch('/hint/api/provider/patients?limit=10', {
+  headers: { 'x-hint-session-key': SESSION_KEY },
+}).then(r => r.json());
+```
+
+The proxy looks up `session.access_token` from the session row (Postgres-backed in the template), forwards the call to Hint with `Authorization: Bearer <access_token>`, and pipes the response back. Query strings, request bodies, and HTTP methods all pass through unchanged.
+
+A `503 "Practice has not completed headless connect yet"` means the session exists but the access_token hasn't landed yet — the connect callback is still in flight. Retry once after a couple of seconds.
+
+For server-to-server calls (background jobs, webhook handlers) that already have a stored access token but no live session, call `https://api.hint.com/api/provider/...` directly with that token. The proxy is for in-browser code acting on behalf of the currently-loaded practice.
+
+Full template-side code is documented in [`node-template.md` § "Calling Hint's Provider API from the embedded UI"](./node-template.md#calling-hints-provider-api-from-the-embedded-ui).
+
 ## Endpoint discovery
 
 Use the MCP server (above) for the canonical list of available endpoints, parameters, and response schemas. A few gotchas worth knowing up-front:
