@@ -1,8 +1,18 @@
-# Caching patterns for dashboard-style marketplace apps
+# Caching patterns for dashboard-style marketplace apps (advanced — read on-demand)
 
-**Read this before building any Core Page app that summarizes data across a panel of patients.** Without a cache, every visit re-fetches the full panel through `/api/provider/*` — for a ~80-member panel that's an 8–25 s cold load and a rate-limit hazard. With the patterns below, every visit renders instantly from a cached snapshot, fans out a delta refresh in the background, and only pays the full fetch cost once per practice per day.
+> **When to reach for this — don't reflexively bake these into v1.**
+>
+> The default for any marketplace app is "fetch on every render" using the template's `hintApi()` wrapper, which already retries on `429`. That works for the overwhelming majority of surfaces — single-patient `clinical_interaction` / `clinical_chart`, `settings` pages, and even most `core_page` apps that don't fan out across the whole panel.
+>
+> Reach for the patterns below **only** when ALL of the following are true:
+>
+> 1. The app is a Core Page dashboard summarizing data **across the practice's full patient panel** — not a per-patient or settings surface.
+> 2. The partner has already hit a real symptom in production: cold loads >8 s on a ~80-member panel, `429` cascades when multiple users hit the surface concurrently, OR an explicit "please cache this" ask.
+> 3. The simpler fixes don't apply: concurrency caps on detail fetches (per `provider-api.md` § Rate-limited endpoints), narrower delta queries via `updated_at[gt]`, or rendering progressively (show the first N rows instantly while the rest stream in).
+>
+> If 1–3 aren't all true, this complexity is a tax — Postgres schema, advisory locks, race conditions in the merge, a 24 h backstop to reason about, dual code paths for first-visit vs returning. Most apps that try to ship caching reflexively get one of these wrong and end up with stale data or a stampede on midnight UTC.
 
-The patterns are validated by the Panel Labs marketplace app (panel-wide lab-health Core Page surfacing latest A1C / lipid / TSH per active member with severity-sorted worklist + cohort filtering + trajectory sparklines) — built end-to-end on the skill and shipped at scale.
+These patterns are validated by the Panel Labs marketplace app (panel-wide lab-health Core Page surfacing latest A1C / lipid / TSH per active member with severity-sorted worklist + cohort filtering + trajectory sparklines) — built end-to-end on the skill and shipped at scale.
 
 ---
 
