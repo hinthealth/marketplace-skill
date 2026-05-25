@@ -76,7 +76,7 @@ The template's `hintApi()` wrapper handles single-request retries on `429` with 
 
 ## Delta queries via `updated_at[gt]`
 
-List endpoints with an `updated_at` filter (interactions, memberships, patients, etc.) accept the bracket-notation operators `[gte]`, `[gt]`, `[lte]`, `[lt]` — same shape as the `created_at` filter mentioned above. **Use `updated_at[gt]` to fetch only what changed since the last sync** — the foundation of any caching layer. Without it, a dashboard app re-fetches the full panel on every visit, which scales linearly with practice size and routinely hits 8–25 s for ~80 members.
+List endpoints with an `updated_at` filter (interactions, memberships, patients, etc.) accept the bracket-notation operators `[gte]`, `[gt]`, `[lte]`, `[lt]` — same shape as the `created_at` filter mentioned above. Useful when an app needs "what changed since the last sync" instead of the full list:
 
 ```
 GET /api/provider/interactions?type=lab&updated_at[gt]=2026-05-22T18:00:00Z
@@ -84,7 +84,17 @@ GET /api/provider/memberships?updated_at[gt]=2026-05-22T18:00:00Z
 GET /api/provider/patients?updated_at[gt]=2026-05-22T18:00:00Z
 ```
 
-Pair with a Postgres-backed snapshot table keyed by `practice_id` and a `last_fetched_at` cursor: read the cached snapshot for instant render, fire `updated_at[gt]=<last_fetched_at>` to fetch only the delta, merge, and update the cursor. For correctness, also do a full backstop fetch once per 24 h per practice in case any deltas were missed. See [`_common/caching-patterns.md`](./caching-patterns.md) for the full recipe (snapshot table + snapshot-first render + delta refresh + 24 h backstop + per-practice and global advisory locks + HTML fragment swap on the client).
+Most apps don't need this — fetching the full list on each render, with the template's built-in `429` retry, is the default. The delta operator is the primitive you'd build on for an explicit caching layer; the actual snapshot-and-merge recipe is in [`_common/caching-patterns.md`](./caching-patterns.md) and is only worth reaching for once the symptoms in the next section appear.
+
+## Advanced: caching for fan-out dashboards
+
+Skip this section unless the app is a Core Page dashboard summarizing data across the practice's whole patient panel **and** the partner has hit one of these symptoms in production:
+
+- Cold loads >8 s on a ~80-member panel.
+- `429` rate-limit cascades in the logs when multiple users open the surface concurrently.
+- The partner explicitly asks for a caching pattern.
+
+If any of those apply, [`_common/caching-patterns.md`](./caching-patterns.md) has the full recipe (snapshot table + snapshot-first render + delta refresh + 24 h backstop + per-practice and global advisory locks + HTML fragment swap on the client). It's ~150 lines of Postgres + JS and adds real complexity — don't bake it into v1 reflexively.
 
 ## Hint JS SDK
 

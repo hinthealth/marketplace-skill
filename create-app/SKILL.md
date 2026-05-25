@@ -136,7 +136,7 @@ The access token from handshake/connect lets the embedded app read practice data
 
 **Before writing any KPI/metric/dashboard code**, read [`_common/provider-api-fields.md`](../_common/provider-api-fields.md) for the schema sketch + gotchas on the top five resources (patients, memberships, customer_invoices, payments, practitioners). It covers the family-vs-individual membership shape, the `status` vs `enrollment_status` disambiguation, where revenue actually lives (NOT `customer_invoices.charges`), and the sandbox `created_at` quirk that flattens every time-series chart. Skipping this file is the difference between a working v1 and a ship-zero-everywhere v1.
 
-**If the app summarizes data across a patient panel** (lab worklists, MRR dashboards, overdue-payment views — any Core Page surface that fans out beyond a single patient), also read [`_common/caching-patterns.md`](../_common/caching-patterns.md) before writing the fetch loop. Without a snapshot + delta + 24 h backstop pattern, an ~80-member panel takes 8–25 s to cold-load and routinely trips detail-endpoint rate limits. The recipe is ~150 lines of Postgres + JS and is the difference between "works in demo" and "scales to real practices".
+Default to a straightforward "fetch on every render" loop — the `hintApi()` wrapper handles retries on `429`, and a single-patient or settings surface won't hit any throughput wall. **Advanced caching patterns are optional** and live in [`_common/caching-patterns.md`](../_common/caching-patterns.md); reach for them only when the partner explicitly asks, OR when the surface is a fan-out dashboard summarizing data across the practice's whole panel and you observe cold loads >8 s or `429` rate-limit cascades in the logs. Don't bake the snapshot + delta + advisory-lock recipe into v1 — it adds complexity that most apps don't need and that's hard to get right on the first try.
 
 ## Step 4: (Optional) Configure the Deployment Service
 
@@ -292,20 +292,53 @@ curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app" \
   -H "Content-Type: application/json" \
   -d "{\"app\": {\"handshake_url\": \"$APP_URL/hint/handshake\"}}"
 
-# Create anchor — use the surface type chosen by the user
-# For core_page: include the sidebar icon fields so the app doesn't render
-# with Hint's generic placeholder icon in the practice's left nav.
+# Create anchor — use the surface type chosen by the user.
+#
+# For core_page: the anchor itself is created here. The sidebar icon
+# (core_page_icon + core_page_icon_label) is set in a second PATCH
+# call below — keeps the create call minimal and lets the icon
+# encoding happen against a known $ANCHOR_ID.
 curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anchors" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"anchor\": {
-      \"type\": \"core_page\",
-      \"source_url\": \"$APP_URL/hint/core_page\",
-      \"core_page_icon_url\": \"<https URL or base64 data URI — reuse $PRODUCT_ICON_URL from Step 6.5 when available>\",
-      \"core_page_icon_label\": \"<short label, ≤14 chars — usually the app name>\"
-    }
-  }"
+  -d "{\"anchor\": {\"type\": \"core_page\", \"source_url\": \"$APP_URL/hint/core_page\"}}"
+
+# Then PATCH the sidebar icon + label onto the just-created anchor.
+# Read _common/sidebar-icons.md for the full rationale, the cleanup rule,
+# and verification steps. Short version: the sidebar icon is NOT the
+# listing icon (listing = filled brand mark on the marketplace tile;
+# sidebar = outlined Material Symbols glyph matching Hint's left-nav
+# style). Pick a Material Symbols name based on the app's domain:
+#
+#   Labs / clinical     → science  or biotech
+#   Billing / revenue   → receipt_long  or payments
+#   Messaging           → forum  or mail
+#   Scheduling          → calendar_month  or schedule
+#   Members / patients  → groups  or person
+#   Reports / analytics → bar_chart  or monitoring
+#   Settings            → settings  or tune
+#
+# Browse the full set at https://fonts.google.com/icons (Outlined, weight 400).
+# Label: app name truncated to ≤14 chars. If the name overflows
+# (e.g. "Outreach & Messaging Hub" → 24 chars), ask the partner for
+# a short form — never auto-truncate mid-word.
+GLYPH="science"   # ← any Material Symbols name from the picker
+LABEL="<short label, ≤14 chars>"
+ANCHOR_ID="<core_page anchor id from the POST response above>"
+
+# Fetch the outlined-400 SVG from the canonical Google repo, strip
+# height/width/fill so it inherits sizing + currentColor, base64-encode.
+CLEAN_SVG=$(curl -sL "https://raw.githubusercontent.com/google/material-design-icons/master/symbols/web/${GLYPH}/materialsymbolsoutlined/${GLYPH}_24px.svg" \
+  | sed -E 's/ (height|width|fill)="[^"]*"//g')
+ICON_DATA_URI="data:image/svg+xml;base64,$(printf '%s' "$CLEAN_SVG" | base64 | tr -d '\n')"
+
+curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anchors/$ANCHOR_ID" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"anchor\": {
+    \"core_page_icon\": \"$ICON_DATA_URI\",
+    \"core_page_icon_label\": \"$LABEL\"
+  }}"
 
 # For clinical_interaction:
 curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anchors" \
@@ -328,7 +361,7 @@ curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anch
 
 An app can have one anchor of each type at most (`core_page`, `clinical_interaction`, `clinical_chart`, `settings`) — pick the ones the app actually needs. Most apps register one, complex ones register two or three.
 
-> **`core_page` sidebar icon (`core_page_icon_url` + `core_page_icon_label`):** without these, every Core Page install renders with Hint's generic placeholder icon in the practice's left nav — the surface the practitioner sees every day. Reuse the listing icon set in Step 6.5 (`partner_product.icon`) for the URL, and use the app's name (truncated to ≤14 chars) for the label. Constraints: roughly 32×32 viewport, single accent color (Hint blue `#0E68E2` is safe), transparent background, simple geometric glyph that reads at small size — SVG strongly preferred. The label is shown as a tooltip on desktop and as visible text on mobile sidebars.
+> **`core_page` sidebar icon — DO NOT reuse the listing icon.** The listing icon (`partner_product.icon`, set in Step 6.5) is a filled brand mark for the marketplace tile. The sidebar icon is an outlined Material-Symbols-style glyph that lives next to Patients / Employers / Reports / Admin in the practice's left nav and adapts to Hint's hover / selected states. Two distinct assets — reusing the listing icon produces a saturated brand-color block that fights every other nav item. Always PATCH a Material Symbols Outlined glyph at weight 400 (fetched from `raw.githubusercontent.com/google/material-design-icons`) with `height` / `width` / `fill` attributes stripped — see the curl above for the one-liner. Full picker + cleanup rule + verification steps in [`_common/sidebar-icons.md`](../_common/sidebar-icons.md). The full asset guideline is documented at <https://developers.hint.com/docs/partner-asset-guidelines> (bullet 1 = listing, bullet 3 = sidebar). The `core_page_icon_label` shows as a tooltip on desktop and visible text on mobile sidebars — keep it ≤14 chars.
 
 ## Step 6.5: Configure the Marketplace Listing
 
