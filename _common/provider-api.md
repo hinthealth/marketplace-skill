@@ -34,6 +34,25 @@ Use the MCP server (above) for the canonical list of available endpoints, parame
 
 Every Provider API client should follow the conventions in [`api-conventions.md`](./api-conventions.md): list endpoints return bare JSON arrays, pagination is `limit`/`offset`, date filters use bracketed operators (`?created_at[gte]=...`), and archived rows are excluded by default. Read that file first — getting the response shape wrong silently produces empty results.
 
+## Rate-limited endpoints — keep detail-fetch concurrency low
+
+Detail (`/{id}`) endpoints on `/api/provider/*` rate-limit aggressively — empirically, fanning out detail fetches across a panel of ~80 patients at concurrency 5+ triggers 429s within the first few seconds, and at concurrency 3 still produces multiple retries per fetch. Two relevant endpoints surfaced first:
+
+- `GET /api/provider/patients/{id}/interactions/lab/{id}` — fanning out one fetch per active member of a panel routinely 429s under modest concurrency.
+- `GET /api/provider/interactions/{id}` (any type) — same shape.
+
+The list-form siblings (`GET /api/provider/interactions?type=lab&...`) have looser limits and should be the default fetch shape — paginate the list, then only detail-fetch individual records when the UI genuinely needs the full body.
+
+**Recommended concurrency caps for partner apps:**
+
+| Workload | Cap |
+|---|---|
+| General detail fetches behind a user-visible action | ≤3 |
+| Backstop / batch fill (24 h refresh, initial seed) | ≤1 |
+| Bulk list fetch (paginated `GET /interactions?type=...`) | full speed, but page with `limit=100` and respect any `Retry-After` |
+
+The template's `hintApi()` wrapper handles single-request retries on `429` with exponential backoff, but partners building dashboard-style apps will still need to **gate the fan-out itself**, not just per-request retries — a 100-request burst at concurrency 5 produces a 429 cascade that retries forever even if each individual retry "works". Use a simple semaphore in JS (`p-limit` or a hand-rolled `Promise.all` chunker) or equivalent in your stack.
+
 ## Delta queries via `updated_at[gt]`
 
 List endpoints with an `updated_at` filter (interactions, memberships, patients, etc.) accept the bracket-notation operators `[gte]`, `[gt]`, `[lte]`, `[lt]` — same shape as the `created_at` filter mentioned above. **Use `updated_at[gt]` to fetch only what changed since the last sync** — the foundation of any caching layer. Without it, a dashboard app re-fetches the full panel on every visit, which scales linearly with practice size and routinely hits 8–25 s for ~80 members.

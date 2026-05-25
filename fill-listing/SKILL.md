@@ -72,7 +72,7 @@ For each section the partner opted into, gather inputs in this order: existing s
 
 - **Existing**: `name`, `summary`, `built_by_name`, `built_by_url`, `icon_url` from `GET /partner/partner_products/:id`.
 - **Scrape**: page `<title>` → candidate `name`. First `<h1>` or hero copy → candidate `summary` (strip the company/product name; the marketplace card already shows it separately). Page `<img class*="logo">` or `/logo.*` → candidate `icon`. Page domain → candidate `built_by_url`.
-- **Q&A**: ask the partner directly for whatever the scrape didn't fill. Cap `summary` at 80 chars. Confirm icon format is PNG / JPEG / SVG / GIF, ≤5MB.
+- **Q&A**: ask the partner directly for whatever the scrape didn't fill. **Cap `summary` at ≤9 words / ≤60 chars** — marketplace cards render summary in a single line under the app name, and anything longer truncates with an ellipsis on the listing page. A 9-word cap forces the partner to pick the one thing the app does best ("Panel-wide lab health monitoring"), not a paragraph ("A dashboard for managing patient lab results, member trends, and overdue follow-ups"). Apply the cap **both at draft time** (when generating from the marketing-site scrape) and **before the PATCH** — if the draft runs long, ask the partner to pick a tighter phrasing rather than truncating silently. Confirm icon format is PNG / JPEG / SVG / GIF, ≤5MB.
 - **Skip `slug` and `type`**: both are create-only on the public API. If they're wrong, the partner emails devsupport@hint.com.
 
 ### 2.2 Overview (`description`, `images[]`)

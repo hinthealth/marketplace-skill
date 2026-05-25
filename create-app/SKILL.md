@@ -161,6 +161,17 @@ To update config on an existing service later: `PATCH /api/partner/partner_produ
 
 ## Step 5: Deploy
 
+> **Pre-deploy checklist (managed-hosted mode only).** In managed-hosted mode the practice gates partner-app deployment behind `partner.custom_apps_enabled`. If the flag is off, the first revision POST below returns 403 / "Custom apps are not enabled for this partner". Verify the setting before deploying:
+>
+> ```bash
+> curl -s "$HINT_API_URL/api/partner/partner" -H "Authorization: Bearer $API_KEY" \
+>   | python3 -c "import sys,json; p=json.load(sys.stdin); print('custom_apps_enabled:', p.get('custom_apps_enabled'))"
+> ```
+>
+> If it reports `False` / `None`, the **practice owner** needs to enable it in the Hint dashboard under **Admin → Developers → Custom App** before this step will succeed. The partner cannot toggle this themselves — it's a practice-side setting. Tell the practice owner to do it and continue once they confirm.
+>
+> Regular-partner mode skips this check (the flag is irrelevant outside the managed-hosted flow).
+
 Zip the app and POST it as a revision. If no service exists yet, the first deploy auto-provisions one with default config.
 
 ```bash
@@ -328,7 +339,7 @@ curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID" \
   -d "{
     \"partner_product\": {
       \"name\": \"<the app name the user gave in question 1>\",
-      \"summary\": \"<a 1-line tagline; derive from the app description or ask the user>\",
+      \"summary\": \"<a 1-line tagline ≤9 words / ≤60 chars; marketplace cards truncate longer values>\",
       \"built_by_name\": \"<partner display name, e.g. the partner's company name>\",
       \"built_by_url\": \"<partner website, optional>\",
       \"icon\": \"<optional URL to a square icon image>\"
