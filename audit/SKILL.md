@@ -66,11 +66,11 @@ curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/services" -H
 
 Each of these returns a JSON document (services + anchors are bare arrays). Collect them — they're the inputs for the rest of the audit.
 
-If `$APP_URL` wasn't provided, pick the row with `service_type: 'web'` and `status: "active"`. The list also contains an auto-provisioned Postgres sibling (`service_type: 'database'`, `service_url: null`) — filter it out:
+If `$APP_URL` wasn't provided, pick the row with `status: "active"` from the services list:
 
 ```bash
 APP_URL=$(curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/services" -H "Authorization: Bearer $API_KEY" \
-  | python3 -c "import sys,json; print(next((s['service_url'] for s in json.load(sys.stdin) if s.get('service_type')=='web' and s.get('status')=='active' and s.get('service_url')),''))")
+  | python3 -c "import sys,json; print(next((s['service_url'] for s in json.load(sys.stdin) if s.get('status')=='active' and s.get('service_url')),''))")
 ```
 
 If `$APP_URL` is empty after that, report **PRE-AUDIT-FAIL: no active web service deployed** and stop.
@@ -145,7 +145,7 @@ PASS: every URL is https or localhost-with-localhost-mode. FAIL: any plain http 
 
 ### 3.7 Env-var hygiene
 
-For each service in `GET /partner/partner_products/$PRODUCT_ID/app/services` with `service_type: 'web'`, fetch the full record:
+For each service in `GET /partner/partner_products/$PRODUCT_ID/app/services`, fetch the full record:
 
 ```bash
 curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/services/$SERVICE_ID" -H "Authorization: Bearer $API_KEY"
