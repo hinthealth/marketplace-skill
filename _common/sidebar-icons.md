@@ -15,45 +15,55 @@ If you reuse the listing icon for the sidebar, the result is a saturated brand-c
 
 ## Picking the glyph
 
-Material Symbols (Google's open-source icon set, https://fonts.google.com/icons) is the recommended source — it's what Hint's own nav uses, so a sidebar icon picked from there drops in cleanly with no styling adjustments.
+Material Symbols (Google's open-source icon set, https://fonts.google.com/icons) is the canonical source — it's what Hint's own nav uses, so a sidebar icon picked from there drops in cleanly with no styling adjustments. Browse the set in the picker, pick the **Outlined** style at weight 400 (normal grade), and note the glyph's name (e.g. `science`, `receipt_long`, `groups`).
 
-**Domain → glyph mapping.** Use the partner's app description (gathered in `create-app` Step 1) to pick the right glyph from `_common/sidebar-icons/`:
+**Domain → suggested glyph.** Use the partner's app description (gathered in `create-app` Step 1) to pick a starting glyph. None of this is prescriptive — if the app's domain has a more specific match in Material Symbols, use it.
 
 | App domain | Primary | Alternate |
 |---|---|---|
-| Labs / clinical data / diagnostics | `science.svg` | `biotech.svg` |
-| Billing / revenue / payments | `receipt_long.svg` | `payments.svg` |
-| Messaging / outreach / patient comms | `forum.svg` | `mail.svg` |
-| Scheduling / appointments | `calendar_month.svg` | `schedule.svg` |
-| Members / patients / panel | `groups.svg` | `person.svg` |
-| Reports / analytics / dashboards | `bar_chart.svg` | `monitoring.svg` |
-| Settings / configuration | `settings.svg` | `tune.svg` |
+| Labs / clinical data / diagnostics | `science` | `biotech` |
+| Billing / revenue / payments | `receipt_long` | `payments` |
+| Messaging / outreach / patient comms | `forum` | `mail` |
+| Scheduling / appointments | `calendar_month` | `schedule` |
+| Members / patients / panel | `groups` | `person` |
+| Reports / analytics / dashboards | `bar_chart` | `monitoring` |
+| Settings / configuration | `settings` | `tune` |
 
-If the app's domain isn't in the table, browse https://fonts.google.com/icons for an Outlined-style glyph at weight 400 (normal grade), download it, and apply the cleanup rule below before using it.
+## Fetch the SVG (canonical URL)
 
-## Cleanup rule for custom glyphs
+Material Symbols' source lives in `google/material-design-icons` on GitHub. The raw SVG for any glyph follows a predictable URL pattern, so the LLM can fetch it on-demand without bundling anything:
 
-Material Symbols' export ships SVGs with `height="24"` and `width="24"` attributes hard-coded. Hint's sidebar sizes the icon via CSS; the explicit attributes fight that. Strip them:
+```bash
+GLYPH="science"  # ← any name from fonts.google.com/icons
+curl -sL "https://raw.githubusercontent.com/google/material-design-icons/master/symbols/web/${GLYPH}/materialsymbolsoutlined/${GLYPH}_24px.svg"
+```
+
+This is the **outlined** weight-400 variant. Other weights / fills follow the same pattern (`materialsymbolsoutlined` → `materialsymbolsrounded` → `materialsymbolssharp`, plus `_wght100..900_grad..._fill1` qualifier folders) but Hint's sidebar expects outlined 400, so stick with this URL form unless there's a specific reason not to.
+
+## Cleanup rule
+
+The upstream SVG ships with `height="24"` and `width="24"` attributes hard-coded. Hint's sidebar sizes the icon via CSS; the explicit attributes fight that. Strip them, along with any explicit `fill` so the icon inherits `currentColor` and lets Hint tint it for hover / selected states:
 
 ```
 - Keep:   xmlns, viewBox, <path> data
-- Remove: height, width, fill (let it inherit currentColor)
+- Remove: height, width, fill
 ```
 
 In one line:
 
 ```bash
-sed -E 's/ (height|width|fill)="[^"]*"//g' downloaded.svg > clean.svg
+sed -E 's/ (height|width|fill)="[^"]*"//g'
 ```
-
-The shipped SVGs under `_common/sidebar-icons/` are already cleaned and paste-ready.
 
 ## Encoding for the PATCH
 
-The `core_page_icon` field on the anchor takes a `data:image/svg+xml;base64,...` URI (max 5MB, but SVGs are kilobytes so this is irrelevant in practice). To encode:
+The `core_page_icon` field on the anchor takes a `data:image/svg+xml;base64,...` URI (max 5MB, but SVGs are kilobytes so this is irrelevant in practice). Full one-liner that fetches → cleans → encodes:
 
 ```bash
-ICON_DATA_URI="data:image/svg+xml;base64,$(base64 < _common/sidebar-icons/science.svg | tr -d '\n')"
+GLYPH="science"
+CLEAN_SVG=$(curl -sL "https://raw.githubusercontent.com/google/material-design-icons/master/symbols/web/${GLYPH}/materialsymbolsoutlined/${GLYPH}_24px.svg" \
+  | sed -E 's/ (height|width|fill)="[^"]*"//g')
+ICON_DATA_URI="data:image/svg+xml;base64,$(printf '%s' "$CLEAN_SVG" | base64 | tr -d '\n')"
 ```
 
 Then attach it to the Core Page anchor:
@@ -92,4 +102,8 @@ After PATCHing, the anchor's GET response should show:
 }
 ```
 
-If `core_page_icon_url` is still `null` after the PATCH lands, double-check the data URI is well-formed (`data:image/svg+xml;base64,` prefix, no embedded newlines in the base64 chunk) and that the anchor's `type` is `core_page` — the icon fields are no-ops on `clinical_interaction` / `clinical_chart` / `settings` anchors.
+If `core_page_icon_url` is still `null` after the PATCH lands, double-check:
+
+1. The data URI is well-formed (`data:image/svg+xml;base64,` prefix, no embedded newlines in the base64 chunk).
+2. The anchor's `type` is `core_page` — the icon fields are no-ops on `clinical_interaction` / `clinical_chart` / `settings` anchors.
+3. The glyph name in the URL exists in Material Symbols — a 404 from `raw.githubusercontent.com` produces an empty `CLEAN_SVG` and a `data:image/svg+xml;base64,` URI with no payload, which Hint rejects.

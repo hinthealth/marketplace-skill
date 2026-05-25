@@ -304,27 +304,33 @@ curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anch
   -d "{\"anchor\": {\"type\": \"core_page\", \"source_url\": \"$APP_URL/hint/core_page\"}}"
 
 # Then PATCH the sidebar icon + label onto the just-created anchor.
-# Read _common/sidebar-icons.md for the full rationale + picker — short
-# version: the sidebar icon is NOT the listing icon (listing = filled
-# brand mark on the marketplace tile; sidebar = outlined Material
-# Symbols glyph matching Hint's left-nav style). Pick from
-# _common/sidebar-icons/<glyph>.svg using the app's domain:
+# Read _common/sidebar-icons.md for the full rationale, the cleanup rule,
+# and verification steps. Short version: the sidebar icon is NOT the
+# listing icon (listing = filled brand mark on the marketplace tile;
+# sidebar = outlined Material Symbols glyph matching Hint's left-nav
+# style). Pick a Material Symbols name based on the app's domain:
 #
-#   Labs / clinical    → science.svg or biotech.svg
-#   Billing / revenue  → receipt_long.svg or payments.svg
-#   Messaging          → forum.svg or mail.svg
-#   Scheduling         → calendar_month.svg or schedule.svg
-#   Members / patients → groups.svg or person.svg
-#   Reports / analytics → bar_chart.svg or monitoring.svg
-#   Settings           → settings.svg or tune.svg
+#   Labs / clinical     → science  or biotech
+#   Billing / revenue   → receipt_long  or payments
+#   Messaging           → forum  or mail
+#   Scheduling          → calendar_month  or schedule
+#   Members / patients  → groups  or person
+#   Reports / analytics → bar_chart  or monitoring
+#   Settings            → settings  or tune
 #
+# Browse the full set at https://fonts.google.com/icons (Outlined, weight 400).
 # Label: app name truncated to ≤14 chars. If the name overflows
 # (e.g. "Outreach & Messaging Hub" → 24 chars), ask the partner for
 # a short form — never auto-truncate mid-word.
-GLYPH="science"   # ← pick from the table above
+GLYPH="science"   # ← any Material Symbols name from the picker
 LABEL="<short label, ≤14 chars>"
-ICON_DATA_URI="data:image/svg+xml;base64,$(base64 < _common/sidebar-icons/${GLYPH}.svg | tr -d '\n')"
 ANCHOR_ID="<core_page anchor id from the POST response above>"
+
+# Fetch the outlined-400 SVG from the canonical Google repo, strip
+# height/width/fill so it inherits sizing + currentColor, base64-encode.
+CLEAN_SVG=$(curl -sL "https://raw.githubusercontent.com/google/material-design-icons/master/symbols/web/${GLYPH}/materialsymbolsoutlined/${GLYPH}_24px.svg" \
+  | sed -E 's/ (height|width|fill)="[^"]*"//g')
+ICON_DATA_URI="data:image/svg+xml;base64,$(printf '%s' "$CLEAN_SVG" | base64 | tr -d '\n')"
 
 curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anchors/$ANCHOR_ID" \
   -H "Authorization: Bearer $API_KEY" \
@@ -355,7 +361,7 @@ curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anch
 
 An app can have one anchor of each type at most (`core_page`, `clinical_interaction`, `clinical_chart`, `settings`) — pick the ones the app actually needs. Most apps register one, complex ones register two or three.
 
-> **`core_page` sidebar icon — DO NOT reuse the listing icon.** The listing icon (`partner_product.icon`, set in Step 6.5) is a filled brand mark for the marketplace tile. The sidebar icon is an outlined Material-Symbols-style glyph that lives next to Patients / Employers / Reports / Admin in the practice's left nav and adapts to Hint's hover / selected states. Two distinct assets — reusing the listing icon produces a saturated brand-color block that fights every other nav item. Always PATCH a glyph from `_common/sidebar-icons/` (or an Outlined Material Symbols icon at weight 400, with `height`/`width`/`fill` attributes stripped). Full picker + cleanup rule + verification steps in [`_common/sidebar-icons.md`](../_common/sidebar-icons.md). The full asset guideline is documented at <https://developers.hint.com/docs/partner-asset-guidelines> (bullet 1 = listing, bullet 3 = sidebar). The `core_page_icon_label` shows as a tooltip on desktop and visible text on mobile sidebars — keep it ≤14 chars.
+> **`core_page` sidebar icon — DO NOT reuse the listing icon.** The listing icon (`partner_product.icon`, set in Step 6.5) is a filled brand mark for the marketplace tile. The sidebar icon is an outlined Material-Symbols-style glyph that lives next to Patients / Employers / Reports / Admin in the practice's left nav and adapts to Hint's hover / selected states. Two distinct assets — reusing the listing icon produces a saturated brand-color block that fights every other nav item. Always PATCH a Material Symbols Outlined glyph at weight 400 (fetched from `raw.githubusercontent.com/google/material-design-icons`) with `height` / `width` / `fill` attributes stripped — see the curl above for the one-liner. Full picker + cleanup rule + verification steps in [`_common/sidebar-icons.md`](../_common/sidebar-icons.md). The full asset guideline is documented at <https://developers.hint.com/docs/partner-asset-guidelines> (bullet 1 = listing, bullet 3 = sidebar). The `core_page_icon_label` shows as a tooltip on desktop and visible text on mobile sidebars — keep it ≤14 chars.
 
 ## Step 6.5: Configure the Marketplace Listing
 
