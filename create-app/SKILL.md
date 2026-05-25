@@ -241,11 +241,28 @@ Once `$APP_URL` is known (Hint-provisioned in Hosted Mode, partner-supplied in S
 
 > **In managed-hosted mode**, the install flow itself does NOT consult `auth_type` or `redirect_url` — the integration is created and activated programmatically by Hint. But the Activation Settings tab in the partner's portal still reads from those fields, and a practice/partner staring at "auth_type: manual (Not Recommended)" right after install will think the skill didn't finish. **Set them anyway** so the UI looks consistent with what actually shipped.
 
+**`post_activation_redirect_url` — only set when the app has a `core_page` anchor.** After a practice activates a partner app, Hint navigates the user to whatever this field points at. For a full-page app (Core Page anchor) the natural destination is the deployed app itself — set it to `$APP_URL` so activation lands the practice owner directly on their newly installed app. For a `clinical_interaction`-only (or `settings`-only) app there is no standalone landing surface — those embed inside a specific clinical or settings context — so leave the field unset and Hint stays on its default post-activation screen. Mixed surfaces that include `core_page`: set it.
+
 ```bash
 # Set auth type and redirect URL for automatic headless activation
 # In managed-hosted mode this is purely cosmetic for the Activation Settings UI
 # (install fires through a different code path); set it anyway so the tab
 # doesn't read "Not Recommended" right after install.
+#
+# Pick ONE of the two curls below based on whether the app includes a
+# core_page anchor.
+
+# ---- Variant A: app has a core_page anchor (set post_activation_redirect_url) ----
+curl -s -X PATCH "$HINT_API_URL/api/partner/partner" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"partner\": {
+        \"auth_type\": \"automatic_headless\",
+        \"redirect_url\": \"$APP_URL/hint/connect/\",
+        \"post_activation_redirect_url\": \"$APP_URL\"
+      }}"
+
+# ---- Variant B: clinical_interaction-only or settings-only (no full-page surface) ----
 curl -s -X PATCH "$HINT_API_URL/api/partner/partner" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
