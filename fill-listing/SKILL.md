@@ -201,9 +201,38 @@ curl -sS -w "\nHTTP %{http_code}\n" -X POST "$HINT_API_URL/api/partner/partner_p
 
 For image uploads (icon, overview images, highlight images, quote headshots): convert to base64 data URI client-side before sending. The platform's `ActiveStorageDataUri` initializer decodes data URIs into attachments automatically.
 
+Supported MIME types: `image/png`, `image/jpeg`, `image/svg+xml`, `image/gif`. **Prefer SVG** for icons and dashboard/feature illustrations — marketplace cards render at multiple sizes (badge, listing card, hero), SVG stays crisp at every zoom level, and the files are routinely ~10× smaller than equivalent PNGs (≈9 KB vs ≈80–150 KB for typical listing assets). Use PNG / JPEG only for photographs (quote headshots, product screenshots).
+
 ```bash
+# PNG (photos / screenshots):
 DATA_URI="data:image/png;base64,$(base64 -i path/to/asset.png | tr -d '\n')"
+
+# SVG (icons, illustrations) — same shape, just the MIME:
+DATA_URI="data:image/svg+xml;base64,$(base64 -i path/to/icon.svg | tr -d '\n')"
 ```
+
+### Overview-image reconciliation (`images[]`)
+
+`PATCH /partner_products/:id/overview` with an `images[]` array uses **id-keyed reconciliation**: entries with a matching `id` are edited in place, entries without an `id` are created, any existing images **not represented** in the array are deleted. Omitting the `images` key entirely leaves images unchanged.
+
+This lets a single PATCH swap the hero image without an explicit DELETE step:
+
+```jsonc
+// Swap hero image: omit the old image's id, include a new entry with just url+alt
+{ "overview": { "images": [ { "url": "data:image/svg+xml;base64,...", "alt": "Dashboard hero" } ] } }
+```
+
+```jsonc
+// Edit existing image's alt text in place — keep its id, change the field
+{ "overview": { "images": [ { "id": "ovi-XXXX", "alt": "Updated alt text" } ] } }
+```
+
+```jsonc
+// Add a second image while keeping the existing one
+{ "overview": { "images": [ { "id": "ovi-XXXX" }, { "url": "data:image/svg+xml;base64,...", "alt": "Worklist screenshot" } ] } }
+```
+
+The equivalent reconciliation **does not exist for highlights** — those are managed via individual `POST` / `PATCH` / `DELETE` per id.
 
 ## Step 5: Verify
 

@@ -33,6 +33,7 @@ Ask the user three things:
 2. **What type of surface?** How should the app appear in Hint:
    - **Core Page** (`core_page`) — a full-page app accessible from the sidebar. Best for dashboards, tools, and standalone features.
    - **Clinical Interaction** (`clinical_interaction`) — appears within clinical workflows, in the context of a specific patient/interaction. Best for clinical tools, lab viewers, and patient-specific features. Receives patient context via `HintSDK.currentPatient` and `HintSDK.interaction`.
+   - **Clinical Chart** (`clinical_chart`) — embedded inside the patient chart view, alongside Hint's native chart sections. Best for chart-resident widgets (latest labs, risk scores, care plan summaries) that should always be visible whenever the practitioner has a chart open, not just during an active interaction. Receives `HintSDK.currentPatient` (no `interaction` since the surface lives outside the interaction timeline).
    - **Settings** (`settings`) — embedded inside the practice's settings area, alongside Hint's own configuration tabs. Best for partner-specific configuration UI (API keys the practice needs to enter, feature toggles, sync schedules, etc.). The anchor is labeled via `settings_label` on the API (defaults to the app name).
 
 3. **How do you want to host it?**
@@ -277,17 +278,31 @@ curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app" \
   -d "{\"app\": {\"handshake_url\": \"$APP_URL/hint/handshake\"}}"
 
 # Create anchor — use the surface type chosen by the user
-# For core_page:
+# For core_page: include the sidebar icon fields so the app doesn't render
+# with Hint's generic placeholder icon in the practice's left nav.
 curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anchors" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"anchor\": {\"type\": \"core_page\", \"source_url\": \"$APP_URL/hint/core_page\"}}"
+  -d "{
+    \"anchor\": {
+      \"type\": \"core_page\",
+      \"source_url\": \"$APP_URL/hint/core_page\",
+      \"core_page_icon_url\": \"<https URL or base64 data URI — reuse $PRODUCT_ICON_URL from Step 6.5 when available>\",
+      \"core_page_icon_label\": \"<short label, ≤14 chars — usually the app name>\"
+    }
+  }"
 
 # For clinical_interaction:
 curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anchors" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d "{\"anchor\": {\"type\": \"clinical_interaction\", \"source_url\": \"$APP_URL/hint/clinical_interaction\"}}"
+
+# For clinical_chart:
+curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anchors" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"anchor\": {\"type\": \"clinical_chart\", \"source_url\": \"$APP_URL/hint/clinical_chart\"}}"
 
 # For settings:
 curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anchors" \
@@ -296,7 +311,9 @@ curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anch
   -d "{\"anchor\": {\"type\": \"settings\", \"source_url\": \"$APP_URL/hint/settings\", \"settings_label\": \"<App Name> Settings\"}}"
 ```
 
-An app can have one anchor of each type at most (`core_page`, `clinical_interaction`, `settings`) — pick the ones the app actually needs. Most apps register one, complex ones register two or three.
+An app can have one anchor of each type at most (`core_page`, `clinical_interaction`, `clinical_chart`, `settings`) — pick the ones the app actually needs. Most apps register one, complex ones register two or three.
+
+> **`core_page` sidebar icon (`core_page_icon_url` + `core_page_icon_label`):** without these, every Core Page install renders with Hint's generic placeholder icon in the practice's left nav — the surface the practitioner sees every day. Reuse the listing icon set in Step 6.5 (`partner_product.icon`) for the URL, and use the app's name (truncated to ≤14 chars) for the label. Constraints: roughly 32×32 viewport, single accent color (Hint blue `#0E68E2` is safe), transparent background, simple geometric glyph that reads at small size — SVG strongly preferred. The label is shown as a tooltip on desktop and as visible text on mobile sidebars.
 
 ## Step 6.5: Configure the Marketplace Listing
 

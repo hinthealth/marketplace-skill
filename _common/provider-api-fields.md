@@ -25,9 +25,18 @@ practitioner: { id, name, ... }  // ← attribution lives HERE, nested
 location: { id, name, address_state, ... }
 memberships: [ { ... } ]   // see Membership below
 sponsorships: [ { ... } ]  // B2B/company-sponsored coverage
+provider_web_link          // ← canonical Hint chart URL — use for deep-links from your app
 ```
 
 **Practitioner attribution is nested.** To attribute a metric (MRR, visit count, etc.) to a provider, join via `patient.practitioner.id` — there is no flat `practitioner_id` column on patient and no `practitioner` field on memberships at all. For MRR-per-provider you go membership → owner (patient) → practitioner.
+
+**`provider_web_link` is the deep-link URL into the chart.** Present on both the list and show endpoints; format is `https://app.hint.com/patients/<patient_id>`. Use this anywhere your app needs a "view in chart" link — e.g. a Core Page worklist row or a Clinical Interaction back-link. The JS SDK does NOT expose a `navigateToPatient` helper, so the recommended pattern is a plain anchor that breaks out of the embed:
+
+```html
+<a target="_top" href="{patient.provider_web_link}">View chart</a>
+```
+
+`target="_top"` is important — without it the chart loads inside the embedded iframe, which is rarely what you want.
 
 ## Membership — `GET /provider/memberships`
 

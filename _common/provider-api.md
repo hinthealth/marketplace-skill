@@ -34,6 +34,18 @@ Use the MCP server (above) for the canonical list of available endpoints, parame
 
 Every Provider API client should follow the conventions in [`api-conventions.md`](./api-conventions.md): list endpoints return bare JSON arrays, pagination is `limit`/`offset`, date filters use bracketed operators (`?created_at[gte]=...`), and archived rows are excluded by default. Read that file first — getting the response shape wrong silently produces empty results.
 
+## Delta queries via `updated_at[gt]`
+
+List endpoints with an `updated_at` filter (interactions, memberships, patients, etc.) accept the bracket-notation operators `[gte]`, `[gt]`, `[lte]`, `[lt]` — same shape as the `created_at` filter mentioned above. **Use `updated_at[gt]` to fetch only what changed since the last sync** — the foundation of any caching layer. Without it, a dashboard app re-fetches the full panel on every visit, which scales linearly with practice size and routinely hits 8–25 s for ~80 members.
+
+```
+GET /api/provider/interactions?type=lab&updated_at[gt]=2026-05-22T18:00:00Z
+GET /api/provider/memberships?updated_at[gt]=2026-05-22T18:00:00Z
+GET /api/provider/patients?updated_at[gt]=2026-05-22T18:00:00Z
+```
+
+Pair with a Postgres-backed snapshot table keyed by `practice_id` and a `last_fetched_at` cursor: read the cached snapshot for instant render, fire `updated_at[gt]=<last_fetched_at>` to fetch only the delta, merge, and update the cursor. For correctness, also do a full backstop fetch once per 24 h per practice in case any deltas were missed. See the (forthcoming) `_common/caching-patterns.md` for the full recipe.
+
 ## Hint JS SDK
 
 For surfaces that need real-time practice context (current patient, current interaction, current user), load the SDK in the embedded HTML:
