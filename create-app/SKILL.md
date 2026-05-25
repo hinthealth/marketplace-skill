@@ -163,14 +163,14 @@ To update config on an existing service later: `PATCH /api/partner/partner_produ
 
 ## Step 5: Deploy
 
-> **Pre-deploy checklist (managed-hosted mode only).** In managed-hosted mode the practice gates partner-app deployment behind `partner.custom_apps_enabled`. If the flag is off, the first revision POST below returns 403 / "Custom apps are not enabled for this partner". Verify the setting before deploying:
+> **Pre-deploy checklist (managed-hosted mode only).** In managed-hosted mode the `custom_apps_enabled` flag on the partner gates whether revisions / services / anchors can be created at all. If it's off, the first revision POST below returns 403 / "Custom apps are not enabled for this partner". Verify the setting before deploying:
 >
 > ```bash
 > curl -s "$HINT_API_URL/api/partner/partner" -H "Authorization: Bearer $API_KEY" \
 >   | python3 -c "import sys,json; p=json.load(sys.stdin); print('custom_apps_enabled:', p.get('custom_apps_enabled'))"
 > ```
 >
-> If it reports `False` / `None`, the **practice owner** needs to enable it in the Hint dashboard under **Admin → Developers → Custom App** before this step will succeed. The partner cannot toggle this themselves — it's a practice-side setting. Tell the practice owner to do it and continue once they confirm.
+> If it reports `False` / `None`, **only the Hint support team can enable it** — the flag is hinter-only (the practice owner cannot toggle it from any settings page, and the partner certainly can't either). Email [devsupport@hint.com](mailto:devsupport@hint.com) with the managed partner's ident (the `ptr-...` id from the verify step above) and ask them to enable custom apps. Once they confirm, re-run the verify GET to see the flag flip to `true`, then continue.
 >
 > Regular-partner mode skips this check (the flag is irrelevant outside the managed-hosted flow).
 
