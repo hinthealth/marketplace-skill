@@ -463,6 +463,21 @@ curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/ser
 
 Env var changes hit the deployed service immediately. Build/start command changes apply on the next revision push.
 
+### Recovering Source Code from a Deployed Revision
+
+Each revision retains the zip the partner uploaded, so partners can pull it back later — useful when the local copy is lost, when auditing what's actually running in production, or as the starting point for a rollback (download an older revision, then re-upload it to redeploy).
+
+```bash
+# 1. Ask the API for a short-lived download URL (valid 30 minutes).
+DL=$(curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/revisions/$REV_ID/download_url" \
+  -H "Authorization: Bearer $API_KEY" | jq -r .url)
+
+# 2. Pull the archive.
+curl -L "$DL" -o "$REV_ID.zip"
+```
+
+Response shape: `{ "url": "https://...", "expires_at": "<iso8601>" }`. Request a fresh URL if it expires. Revisions created via the vibe-code path have no uploaded archive and return 404.
+
 **Self-Hosted Mode** — the partner deploys to their own infrastructure however they normally do; nothing changes on Hint's side. If the partner moves the app to a new URL, re-run the URL-registration calls from Step 6 with the updated `$APP_URL`.
 
 ## Troubleshooting
