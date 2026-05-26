@@ -110,9 +110,9 @@ Returns a flat array of `resource.action` strings (e.g. `["company.created", "cu
 }
 ```
 
-Field-name gotcha: the wrapper key for the resource snapshot is `object`, NOT `data` (and not `record`).
+The `object` field carries the resource snapshot — its shape matches the corresponding `GET /api/provider/<resource>/:id` response, so client code that already parses that endpoint can reuse the same field accessors.
 
-**Signature verification.** Every event POST is signed with the same `X-Hint-Signature` HMAC mechanism as `/hint/handshake` — HMAC-SHA256 over the raw request body using the partner's webhooks signature key (visible in Partner Portal → API Keys → Webhooks Signature Key, mirrored to the `HINT_WEBHOOK_SECRET` env var on Hosted Mode deploys). Reuse the handshake verification code in [`node-template.md`](./node-template.md) — same secret, same header, same algorithm. Reject any request whose signature doesn't match.
+**Signature verification.** Each request carries an `X-Hint-Signature: sha256=<hmac>` header — HMAC-SHA256 of the raw request body, keyed by the partner's webhook signature key (Partner Portal → API Keys → Webhooks Signature Key, mirrored to the `HINT_WEBHOOK_SECRET` env var on Hosted Mode deploys). Compute the expected signature on receipt and reject mismatches. [`node-template.md`](./node-template.md) ships a Node implementation that wires this up correctly.
 
 **Retries.** Hint retries non-2xx responses with exponential backoff (configured per partner). The endpoint must respond with a 2xx within ~10s to count as delivered; failed deliveries are visible via `GET /partner/webhook_requests`.
 
