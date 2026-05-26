@@ -111,6 +111,12 @@ The same rule applies to access tokens (used to call `/api/provider/*`): an app 
 
 If the app does not persist any practice-scoped state (e.g. a pure presentation surface that calls `/api/provider/*` and renders the response without writing anything), tenancy is automatic — the access token is already practice-scoped. But the moment the app adds any persisted state (sessions count; see the `requireSession` example), `practice_id` columns become mandatory.
 
+## Subscribing to events (optional)
+
+The three required routes above cover install + embed. Apps that want **push-based** updates when practice data changes (instead of polling `/api/provider/*`) can additionally register a webhook URL with Hint — `POST /partner/webhook_endpoints` — and Hint will POST events (`patient.created`, `customer_invoice.paid`, `membership.updated`, etc.) to it with the same `X-Hint-Signature` HMAC the handshake uses.
+
+Not required for v1. Most marketplace apps poll for what they need. See [`api-conventions.md` § "Webhook event subscriptions"](./api-conventions.md#webhook-event-subscriptions) for the registration call, the canonical event-type discovery endpoint (`GET /partner/integration_events`), the event payload shape, and signature verification notes.
+
 ## Smoke test
 
 A correctly-implemented app responds this way to unauthenticated probes:
