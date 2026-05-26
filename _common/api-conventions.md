@@ -74,6 +74,48 @@ Hint sets these automatically on every Hosted-Mode deploy. Self-Hosted Mode apps
 | `HINT_WEBHOOK_SECRET` | Used to verify the `X-Hint-Signature` header on `POST /hint/handshake`. The partner finds this in the Partner Portal under **API Keys → Webhooks Signature Key**. |
 | `DATABASE_URL` | Postgres connection string (only present when the auto-provisioned sibling database is connectable). |
 
+## Webhook event subscriptions
+
+Marketplace apps that want push-based updates (instead of polling `/api/provider/*`) register a webhook URL that Hint POSTs events to.
+
+**Register a webhook endpoint:**
+
+```bash
+curl -X POST "$HINT_API_URL/api/partner/webhook_endpoints" \
+  -H "Authorization: Bearer $HINT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"webhook_url": "https://yourapp.example.com/hint/events"}'
+```
+
+There is **no per-endpoint event filter today** — a registered endpoint receives every event the partner's integrations emit. The endpoint should ignore event types it doesn't care about.
+
+**Discover which event types fire:**
+
+```bash
+curl "$HINT_API_URL/api/partner/integration_events" \
+  -H "Authorization: Bearer $HINT_API_KEY"
+```
+
+Returns a flat array of `resource.action` strings (e.g. `["company.created", "customer_invoice.paid", "patient.inactive", ...]`) derived from Hint's live event registry. Use this list to know what event types your handler may see. New `resource.action` pairs may be added without an API version bump — implementations should `default:` ignore unknown types rather than reject.
+
+**Payload shape** delivered to `webhook_url`:
+
+```jsonc
+{
+  "id":          "evt-...",                       // event ident
+  "type":        "patient.created",               // <resource>.<action>
+  "practice_id": "prc-...",                       // which practice triggered it
+  "created_at":  "2026-05-26T14:23:00.000Z",
+  "object":      { ...full resource snapshot... } // shape matches GET /api/provider/<resource>/:id
+}
+```
+
+Field-name gotcha: the wrapper key for the resource snapshot is `object`, NOT `data` (and not `record`).
+
+**Signature verification.** Every event POST is signed with the same `X-Hint-Signature` HMAC mechanism as `/hint/handshake` — HMAC-SHA256 over the raw request body using the partner's webhooks signature key (visible in Partner Portal → API Keys → Webhooks Signature Key, mirrored to the `HINT_WEBHOOK_SECRET` env var on Hosted Mode deploys). Reuse the handshake verification code in [`node-template.md`](./node-template.md) — same secret, same header, same algorithm. Reject any request whose signature doesn't match.
+
+**Retries.** Hint retries non-2xx responses with exponential backoff (configured per partner). The endpoint must respond with a 2xx within ~10s to count as delivered; failed deliveries are visible via `GET /partner/webhook_requests`.
+
 ## Services list contains only web services
 
 `GET /api/partner/partner_products/:partner_product_id/app/services` returns the partner-managed web services (the ones running the partner's code). Pick the row with `status: 'active'` and read `service_url` for `$APP_URL`. Most apps have exactly one web service.
