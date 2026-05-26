@@ -100,7 +100,7 @@ For each section the partner opted into, gather inputs in this order: existing s
 
 - **Existing**: `GET /partner/partner_products/:id/categories`.
 - **Catalog**: `GET /partner/product_categories` returns the flat list of all marketplace categories currently in use, ordered by name. Pick from this list to align with existing browse — only invent a new category name if nothing fits.
-- **Attach by name (creates if new)**: `POST /partner/partner_products/:id/categories` with `{ "category": { "name": "Communication" } }`. If a category with that name already exists, it gets attached; otherwise a new one is created and attached.
+- **Attach by name (creates if new)**: `POST /partner/partner_products/:id/categories` with `{ "name": "Communication" }`. If a category with that name already exists, it gets attached; otherwise a new one is created and attached.
 - **Attach an existing category by id**: `PATCH /partner/partner_products/:id/categories/:cid`.
 - **Q&A**: show the catalog, let the partner pick 1–3.
 
@@ -160,13 +160,13 @@ For each approved section, hit the dedicated endpoint. **Check the response per 
 curl -sS -w "\nHTTP %{http_code}\n" -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"product": {"name": "Acme Health Connect", "summary": "…", "built_by_name": "Acme", "built_by_url": "https://acme.example.com", "icon": "data:image/png;base64,…"}}'
+  -d '{"name": "Acme Health Connect", "summary": "…", "built_by_name": "Acme", "built_by_url": "https://acme.example.com", "icon": "data:image/png;base64,…"}'
 
 # Overview — PATCH /partner/partner_products/:id/overview
 curl -sS -w "\nHTTP %{http_code}\n" -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/overview" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"overview": {"description": "…", "images": [{"url": "data:image/png;base64,…", "alt": "…"}]}}'
+  -d '{"description": "…", "images": [{"url": "data:image/png;base64,…", "alt": "…"}]}'
 
 # Highlights — POST /partner/partner_products/:id/highlights per row
 for HL_JSON in "$@"; do
@@ -174,25 +174,25 @@ for HL_JSON in "$@"; do
     -H "Authorization: Bearer $API_KEY" \
     -H "Content-Type: application/json" \
     -d "$HL_JSON"
-  # body: {"highlight": {"title": "…", "description": "…", "image": "data:image/png;base64,…", "position": 1}}
+  # body: {"title": "…", "description": "…", "image": "data:image/png;base64,…", "position": 1}
 done
 
 # Quotes — same shape, field names are text/author/author_title:
-#   {"quote": {"text": "…", "author": "Sarah Chen", "author_title": "Office Manager, Mesa Family Practice", "author_image": "data:image/png;base64,…", "position": 1}}
+#   {"text": "…", "author": "Sarah Chen", "author_title": "Office Manager, Mesa Family Practice", "author_image": "data:image/png;base64,…", "position": 1}
 
 # Categories — POST by name (creates+attaches if new), or PATCH by id (attach existing):
 curl -sS -w "\nHTTP %{http_code}\n" -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/categories" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"category": {"name": "Communication"}}'
+  -d '{"name": "Communication"}'
 
 # Links — note link_type enum + value (not "url"):
 curl -sS -w "\nHTTP %{http_code}\n" -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/links" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"link": {"link_type": "url", "value": "https://acme.example.com/docs", "title": "Documentation", "position": 1}}'
+  -d '{"link_type": "url", "value": "https://acme.example.com/docs", "title": "Documentation", "position": 1}'
 
-# Preconditions:
+# Preconditions (this one still requires the `precondition` wrapper key):
 curl -sS -w "\nHTTP %{http_code}\n" -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/preconditions" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
@@ -219,17 +219,17 @@ This lets a single PATCH swap the hero image without an explicit DELETE step:
 
 ```jsonc
 // Swap hero image: omit the old image's id, include a new entry with just url+alt
-{ "overview": { "images": [ { "url": "data:image/svg+xml;base64,...", "alt": "Dashboard hero" } ] } }
+{ "images": [ { "url": "data:image/svg+xml;base64,...", "alt": "Dashboard hero" } ] }
 ```
 
 ```jsonc
 // Edit existing image's alt text in place — keep its id, change the field
-{ "overview": { "images": [ { "id": "ovi-XXXX", "alt": "Updated alt text" } ] } }
+{ "images": [ { "id": "ovi-XXXX", "alt": "Updated alt text" } ] }
 ```
 
 ```jsonc
 // Add a second image while keeping the existing one
-{ "overview": { "images": [ { "id": "ovi-XXXX" }, { "url": "data:image/svg+xml;base64,...", "alt": "Worklist screenshot" } ] } }
+{ "images": [ { "id": "ovi-XXXX" }, { "url": "data:image/svg+xml;base64,...", "alt": "Worklist screenshot" } ] }
 ```
 
 The equivalent reconciliation **does not exist for highlights** — those are managed via individual `POST` / `PATCH` / `DELETE` per id.
