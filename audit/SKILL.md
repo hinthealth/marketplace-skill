@@ -85,7 +85,7 @@ Required fields:
 
 - `partner.name` — non-empty
 - `partner.email` — non-empty, looks like an email
-- `partner.redirect_url` — non-empty, starts with `https://` (or `http://localhost` in localhost_mode), ends with a trailing slash or `/hint/connect/`
+- `partner.redirect_url` — non-empty, starts with `https://`, ends with a trailing slash or `/hint/connect/` (localhost development URLs live in the separate `localhost_redirect_url` column, never here)
 - `partner.auth_type` — `automatic_headless` for production-ready apps
 - `app.handshake_url` — non-empty, starts with `https://`, points at the same origin as `$APP_URL`
 - `anchors` — at least one anchor registered, each with a non-empty `source_url` starting with `https://`
@@ -139,9 +139,9 @@ SKIP: if the partner didn't provide the webhook secret.
 
 ### 3.6 HTTPS-only
 
-Walk `partner.redirect_url`, `app.handshake_url`, every `anchor.source_url`. Each must start with `https://`. Localhost URLs (`http://localhost:*`) are acceptable only if the app has `localhost_mode` enabled — check `app.localhost_mode` in the GET response.
+Walk `partner.redirect_url`, `app.handshake_url`, every `anchor.source_url`. Each must start with `https://` — the prod URL columns reject plain http. Localhost development URLs live in the separate `localhost_*` siblings (`localhost_redirect_url`, `localhost_handshake_url`, `localhost_source_url`), which are http-only and sandbox-partners-only; the per-session `localhost_mode` flag is computed by Hint, not set on the app. Do not move a localhost URL into a prod column.
 
-PASS: every URL is https or localhost-with-localhost-mode. FAIL: any plain http URL outside localhost_mode.
+PASS: every prod URL is https. FAIL: any plain http URL in a prod column.
 
 ### 3.7 Env-var hygiene
 
@@ -216,7 +216,7 @@ CRITICAL (block release):
   ✗ 3.3 Handshake accepts unsigned requests — apps are leaking sessions. Fix signature verification immediately.
 
 HIGH:
-  ✗ 3.6 anchor 'core_page' source_url uses http:// in non-localhost-mode app
+  ✗ 3.6 anchor 'core_page' source_url uses http:// (prod URLs must be https)
 
 MEDIUM:
   ⚠ 3.1 partner.email is empty
@@ -231,7 +231,7 @@ INFO / PASS:
 
 Remediation:
   - 3.3: Audit POST /hint/handshake handler. Confirm raw body is captured before JSON parsing and constant-time HMAC compare is used. See _common/marketplace-contract.md.
-  - 3.6: PATCH /partner/partner_products/$PRODUCT_ID/app/anchors/<anchor_id> with source_url starting in https://, or enable localhost_mode for development.
+  - 3.6: PATCH /partner/partner_products/$PRODUCT_ID/app/anchors/<anchor_id> with source_url starting in https://. For local development set the anchor's localhost_source_url instead — the prod source_url must stay https.
   - 3.1: PATCH /partner/partner -d '{"partner":{"email":"..."}}'.
   - 3.8: PATCH /partner/partner_products/$PRODUCT_ID/app/anchors/<anchor_id> -d '{"anchor":{"settings_label":"..."}}'.
 ```
