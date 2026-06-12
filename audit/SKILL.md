@@ -29,7 +29,7 @@ Ask the partner:
 
 1. **Partner API key** — sandbox (`sbx-...`) or live. The audit runs against whichever environment the key belongs to.
 2. **App URL (optional)** — if the partner already knows their `$APP_URL`, save it. Otherwise the audit will discover it from `GET /partner/partner_products/:partner_product_id/app/services`.
-3. **Webhooks signature key (optional)** — needed for the "valid signature accepted" probe. Find it in the Partner Portal under **API Keys → Webhooks Signature Key**. Without it, the audit can still run all the negative tests (forged signature, no signature) — just not the positive one.
+3. **Webhooks signature key (optional)** — needed for the "valid signature accepted" probe. Find it in the Partner Portal under **Webhook Settings → Webhooks Signature Key** (per backend; most partners have one). Without it, the audit can still run all the negative tests (forged signature, no signature) — just not the positive one.
 
 Verify the key works:
 
@@ -51,8 +51,12 @@ curl -s "$HINT_API_URL/api/partner/partner_products" -H "Authorization: Bearer $
 Pick the first entry (or match by name if there are multiple) and save its `id` as `$PRODUCT_ID`. Then:
 
 ```bash
-# Partner-level config
+# Partner-level config (name, email)
 curl -s "$HINT_API_URL/api/partner/partner" -H "Authorization: Bearer $API_KEY"
+
+# Backend config (auth_type, redirect_url, localhost_redirect_url) — most partners have a
+# single default backend; take the first entry of the array
+curl -s "$HINT_API_URL/api/partner/partner_backends" -H "Authorization: Bearer $API_KEY"
 
 # App-level config (handshake URL + role mappings)
 curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app" -H "Authorization: Bearer $API_KEY"
@@ -85,8 +89,8 @@ Required fields:
 
 - `partner.name` — non-empty
 - `partner.email` — non-empty, looks like an email
-- `partner.redirect_url` — non-empty, starts with `https://`, ends with a trailing slash or `/hint/connect/` (localhost development URLs live in the separate `localhost_redirect_url` column, never here)
-- `partner.auth_type` — `automatic_headless` for production-ready apps
+- `backend.redirect_url` — non-empty, starts with `https://`, ends with a trailing slash or `/hint/connect/` (from the `partner_backends` response; localhost development URLs live in the separate `localhost_redirect_url` field on the backend, never here)
+- `backend.auth_type` — `automatic_headless` for production-ready apps
 - `app.handshake_url` — non-empty, starts with `https://`, points at the same origin as `$APP_URL`
 - `anchors` — at least one anchor registered, each with a non-empty `source_url` starting with `https://`
 
@@ -139,7 +143,7 @@ SKIP: if the partner didn't provide the webhook secret.
 
 ### 3.6 HTTPS-only
 
-Walk `partner.redirect_url`, `app.handshake_url`, every `anchor.source_url`. Each must start with `https://` — the prod URL columns reject plain http. Localhost development URLs live in the separate `localhost_*` siblings (`localhost_redirect_url`, `localhost_handshake_url`, `localhost_source_url`), which are http-only and sandbox-partners-only; the per-session `localhost_mode` flag is computed by Hint, not set on the app. Do not move a localhost URL into a prod column.
+Walk `backend.redirect_url` (from `partner_backends`), `app.handshake_url`, every `anchor.source_url`. Each must start with `https://` — the prod URL columns reject plain http. Localhost development URLs live in the separate `localhost_*` siblings (`localhost_redirect_url`, `localhost_handshake_url`, `localhost_source_url`), which are http-only and sandbox-partners-only; the per-session `localhost_mode` flag is computed by Hint, not set on the app. Do not move a localhost URL into a prod column.
 
 PASS: every prod URL is https. FAIL: any plain http URL in a prod column.
 

@@ -71,7 +71,7 @@ Hint sets these automatically on every Hosted-Mode deploy. Self-Hosted Mode apps
 | `HINT_API_URL` | Base URL of the Hint API. Use `https://api.hint.com` for both sandbox and live. |
 | `HINT_API_KEY` | Partner-wide API key for `/api/partner/*` calls. NOT used for `/api/provider/*` (those need the practice-scoped access token from `/hint/connect/:code`). |
 | `HINT_PARTNER_ID` | Stable partner ident (e.g. `ptr-...` / `sbx-ptr-...`). Useful for log scoping. |
-| `HINT_WEBHOOK_SECRET` | Used to verify the `X-Hint-Signature` header on `POST /hint/handshake`. The partner finds this in the Partner Portal under **API Keys → Webhooks Signature Key**. |
+| `HINT_WEBHOOK_SECRET` | Used to verify the `X-Hint-Signature` header on `POST /hint/handshake`. The partner finds this in the Partner Portal under **Webhook Settings → Webhooks Signature Key** (the key belongs to the selected backend; most partners have one). |
 | `DATABASE_URL` | Postgres connection string (only present when the auto-provisioned sibling database is connectable). |
 
 ## Webhook event subscriptions
@@ -112,7 +112,7 @@ Returns a flat array of `resource.action` strings (e.g. `["company.created", "cu
 
 The `object` field carries the resource snapshot — its shape matches the corresponding `GET /api/provider/<resource>/:id` response, so client code that already parses that endpoint can reuse the same field accessors.
 
-**Signature verification.** Each request carries an `X-Hint-Signature: sha256=<hmac>` header — HMAC-SHA256 of the raw request body, keyed by the partner's webhook signature key (Partner Portal → API Keys → Webhooks Signature Key, mirrored to the `HINT_WEBHOOK_SECRET` env var on Hosted Mode deploys). Compute the expected signature on receipt and reject mismatches. [`node-template.md`](./node-template.md) ships a Node implementation that wires this up correctly.
+**Signature verification.** Each request carries an `X-Hint-Signature: sha256=<hmac>` header — HMAC-SHA256 of the raw request body, keyed by the backend's webhook signature key (Partner Portal → Webhook Settings → Webhooks Signature Key, mirrored to the `HINT_WEBHOOK_SECRET` env var on Hosted Mode deploys). Compute the expected signature on receipt and reject mismatches. [`node-template.md`](./node-template.md) ships a Node implementation that wires this up correctly.
 
 **Retries.** Hint retries non-2xx responses with exponential backoff (configured per partner). The endpoint must respond with a 2xx within ~10s to count as delivered; failed deliveries are visible via `GET /partner/webhook_requests`.
 

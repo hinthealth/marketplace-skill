@@ -259,18 +259,28 @@ Once `$APP_URL` is known (Hint-provisioned in Hosted Mode, partner-supplied in S
 
 **`post_activation_action` — only set when the app has a `core_page` anchor.** After a practice activates a partner app, Hint can navigate the user to the app's embedded core page surface. The product-level `post_activation_action` enum controls this — set it to `"redirect_to_core_page_anchor"` and Hint resolves to the app's core page route (`/apps/<product-slug>`) automatically; leave it unset (`null`) for `clinical_interaction`-only or `settings`-only apps that have no standalone landing surface. Without it set on a full-page app, every install lands the practice owner back on the marketplace listing page they just came from, which is dead weight when the user's intent is "use the app now". Mixed surfaces that include `core_page`: set it.
 
+# `auth_type` and `redirect_url` live on the partner's **backend** — the connection
+# settings for one of the partner's environments. Most partners have a single default
+# backend; fetch it first and save its `id` (looks like `pbnd-XXXXXXXXXX`) as `$BACKEND_ID`.
+# If the partner has multiple backends, pick the one this app integrates against (the
+# Partner Portal → Webhook Settings page lets them switch between backends).
+
 ```bash
-# Set auth type and redirect URL for automatic headless activation.
-# This stays on the partner level — these fields gate the install-flow
-# auth handshake.
+curl -s "$HINT_API_URL/api/partner/partner_backends" \
+  -H "Authorization: Bearer $API_KEY"
+# -> bare JSON array; take the first entry's "id" as $BACKEND_ID
+```
+
+```bash
+# Set auth type and redirect URL for automatic headless activation on the backend.
 #
 # In managed-hosted mode this PATCH is purely cosmetic for the Activation
 # Settings UI (install fires through a different code path); set it anyway
 # so the tab doesn't read "Not Recommended" right after install.
-curl -s -X PATCH "$HINT_API_URL/api/partner/partner" \
+curl -s -X PATCH "$HINT_API_URL/api/partner/partner_backends/$BACKEND_ID" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"partner\": {
+  -d "{\"partner_backend\": {
         \"auth_type\": \"automatic_headless\",
         \"redirect_url\": \"$APP_URL/hint/connect/\"
       }}"
@@ -487,7 +497,7 @@ Response shape: `{ "url": "https://...", "expires_at": "<iso8601>" }`. Request a
 - **"Product type must be app"** — The partner's product type must be `app`. Update it in the Partner Portal.
 - **403 on Partner API write endpoints** — Sandbox keys (`sbx-` prefix) can fully manage the marketplace plumbing (revisions, services, anchors, app + partner settings) but **cannot create or modify business records** (e.g. `POST /api/partner/charges`, `POST /api/partner/practice_charges`). Those endpoints require a production-approved partner — contact [devsupport@hint.com](mailto:devsupport@hint.com) for promotion. If a sandbox key is hitting 403 on a non-business endpoint, the API key may not have the right permissions; double-check it's the partner's own key, not an integration key.
 - **428 "This action requires a Practice" on `/api/provider/*`** — You called a Provider endpoint with the partner-wide `HINT_API_KEY` instead of a practice-scoped access token. Provider endpoints can only be called on behalf of a specific practice — use the access_token from `POST /api/oauth/tokens` (the value persisted during `/hint/connect/:code`). See [`_common/provider-api.md`](../_common/provider-api.md).
-- **Handshake fails with 401** — Most common cause: `HINT_WEBHOOK_SECRET` on the deployed service doesn't match the partner's current **Webhooks Signature Key** in the Partner Portal (visible under API Keys). If the partner ever rotated that key, the env var on the service is now stale — re-push env vars via `PATCH /api/partner/partner_products/$PRODUCT_ID/app/services/:id` to pick up the current value. The template's verifier logs the last 4 chars of the env var on mismatch — compare against the portal's current key.
+- **Handshake fails with 401** — Most common cause: `HINT_WEBHOOK_SECRET` on the deployed service doesn't match the backend's current **Webhooks Signature Key** in the Partner Portal (visible under Webhook Settings). If the partner ever rotated that key, the env var on the service is now stale — re-push env vars via `PATCH /api/partner/partner_products/$PRODUCT_ID/app/services/:id` to pick up the current value. The template's verifier logs the last 4 chars of the env var on mismatch — compare against the portal's current key.
 - **Headless connect fails** — The API URL env var may not point to the correct Hint API instance.
 - **Embedded page doesn't load** — Verify the anchor exists and the `source_url` matches `$APP_URL` + the correct route for the surface type.
 
