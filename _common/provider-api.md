@@ -74,6 +74,12 @@ The list-form siblings (`GET /api/provider/interactions?type=lab&...`) have loos
 
 The template's `hintApi()` wrapper handles single-request retries on `429` with exponential backoff, but partners building dashboard-style apps will still need to **gate the fan-out itself**, not just per-request retries — a 100-request burst at concurrency 5 produces a 429 cascade that retries forever even if each individual retry "works". Use a simple semaphore in JS (`p-limit` or a hand-rolled `Promise.all` chunker) or equivalent in your stack.
 
+## `patient_access` — which interactions the patient can see
+
+Clinical interactions carry a boolean `patient_access` field on both the list (`GET /api/provider/interactions`) and detail endpoints. It is `true` when the interaction has been shared with the patient and is viewable by them, `false` otherwise. Use it to decide what a patient-facing surface should display — do not assume every interaction returned by the Provider API is patient-viewable.
+
+**Labs: show only the PDF report to patients.** For lab interactions, even when `patient_access` is `true`, display only the lab's PDF report (the file under the interaction's `report`/files) to patients — not the raw structured result values. This is a data-display restriction from the lab data source (Health Gorilla). Raw result fields can be used in provider-facing views, but patient-facing surfaces must render the PDF only.
+
 ## Delta queries via `updated_at[gt]`
 
 List endpoints with an `updated_at` filter (interactions, memberships, patients, etc.) accept the bracket-notation operators `[gte]`, `[gt]`, `[lte]`, `[lt]` — same shape as the `created_at` filter mentioned above. Useful when an app needs "what changed since the last sync" instead of the full list:
