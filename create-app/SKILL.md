@@ -77,6 +77,25 @@ curl -s "$HINT_API_URL/api/partner/partner_products" \
 
 Returns a bare JSON array. Most partners have exactly one product; pick the first entry and save its `id` (looks like `ppro-XXXXXXXXXX`) as `$PRODUCT_ID`. If the partner has multiple products, match by `name` against the app the user is building. The Partner Portal URL bar (`/partner/products/ppro-XXXXXXXXXX/activation_settings`) also exposes the ident as a fallback.
 
+**If the partner has no product yet — or is deliberately adding another** — create one with `POST /api/partner/partner_products` (a second product only succeeds if the partner has `allow_multiple_products` set; otherwise the create returns "Partner already has a product", which means they aren't approved for multiple products — point them at [devsupport@hint.com](mailto:devsupport@hint.com)). Every product attaches to exactly one of the partner's backends, and the create payload decides which:
+
+- **One backend (the common case):** omit both `partner_backend` and `create_new_backend`. The API attaches the partner's default backend.
+- **The partner has more than one backend:** the API won't guess — omitting both is rejected with a 422. List the backends first (`GET /api/partner/partner_backends`), then pass either `partner_backend: "pbnd-XXXXXXXXXX"` to reuse a specific existing one, or `create_new_backend: true` to mint a fresh backend for this product. Confirm the choice with the user; for an additional product that should stay isolated, default to `create_new_backend: true` and reuse only when the user says it shares an existing backend.
+- **Never send both** `partner_backend` and `create_new_backend` — that's a 422.
+
+```bash
+# First product, single backend — let the API attach the default:
+curl -s -X POST "$HINT_API_URL/api/partner/partner_products" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"partner_product": {"name": "My App", "slug": "my-app", "type": "app"}}'
+
+# Additional product that needs its own backend — add "create_new_backend": true
+# (or "partner_backend": "pbnd-..." to reuse a specific existing backend).
+```
+
+Save the returned `id` as `$PRODUCT_ID`. The `slug` and `type` are only settable here at creation — they can't be changed via API afterward.
+
 From the product row, also check `type` — should be `app` for marketplace apps. If the field is missing or not `app`, treat that as "not yet configured": ask the partner to confirm with Hint support that their product has been set up as an app-type, then continue. Don't hard-fail; an absent/wrong type is a setup-state quirk, not an immediate error.
 
 If POST/PATCH calls later return "Partner product type must be app", that's the firm rejection — at that point the product type genuinely needs admin attention before deploying. **In managed-hosted mode, the practice can't fix this themselves** — point them at [devsupport@hint.com](mailto:devsupport@hint.com).
@@ -260,15 +279,15 @@ Once `$APP_URL` is known (Hint-provisioned in Hosted Mode, partner-supplied in S
 **`post_activation_action` — only set when the app has a `core_page` anchor.** After a practice activates a partner app, Hint can navigate the user to the app's embedded core page surface. The product-level `post_activation_action` enum controls this — set it to `"redirect_to_core_page_anchor"` and Hint resolves to the app's core page route (`/apps/<product-slug>`) automatically; leave it unset (`null`) for `clinical_interaction`-only or `settings`-only apps that have no standalone landing surface. Without it set on a full-page app, every install lands the practice owner back on the marketplace listing page they just came from, which is dead weight when the user's intent is "use the app now". Mixed surfaces that include `core_page`: set it.
 
 # `auth_type` and `redirect_url` live on the partner's **backend** — the connection
-# settings for one of the partner's environments. Most partners have a single default
-# backend; fetch it first and save its `id` (looks like `pbnd-XXXXXXXXXX`) as `$BACKEND_ID`.
-# If the partner has multiple backends, pick the one this app integrates against (the
-# Partner Portal → Webhook Settings page lets them switch between backends).
+# settings for one of the partner's environments. The product is attached to exactly
+# one backend (chosen at create time, see Step 1), so use *that* backend — don't grab
+# an arbitrary one. The product row from Step 1 carries it under `partner_backend.id`;
+# save that as $BACKEND_ID. If you don't have the product row handy, fetch it again:
 
 ```bash
-curl -s "$HINT_API_URL/api/partner/partner_backends" \
+curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID" \
   -H "Authorization: Bearer $API_KEY"
-# -> bare JSON array; take the first entry's "id" as $BACKEND_ID
+# -> save the response's "partner_backend": { "id": "pbnd-..." } as $BACKEND_ID
 ```
 
 ```bash
