@@ -1,6 +1,6 @@
 # Sidebar icons for Core Page apps (shared fragment)
 
-**Read this when an app registers a `core_page` anchor.** The Core Page icon shows up in every practice's left sidebar — right next to Patients / Employers / Reports / Admin — and it's what the practitioner sees every day. Getting it right is high-leverage UX; getting it wrong (or skipping it, so Hint falls back to the generic placeholder) leaves a permanent "looks unfinished" stain on the install.
+**Read this when an app registers a `core_page` surface.** The Core Page icon shows up in every practice's left sidebar — right next to Patients / Employers / Reports / Admin — and it's what the practitioner sees every day. Getting it right is high-leverage UX; getting it wrong (or skipping it, so Hint falls back to the generic placeholder) leaves a permanent "looks unfinished" stain on the install.
 
 ## The sidebar icon is NOT the listing icon
 
@@ -9,7 +9,7 @@ Two distinct assets, easy to conflate:
 | Field | Where it shows | Visual style |
 |---|---|---|
 | `partner_product.icon` / `icon_url` | The marketplace listing tile (`/apps/<slug>` and the browse grid) | **Filled brand mark** — square card, your brand color, your glyph, your typography. A logo. |
-| `app.anchors[core_page].core_page_icon` / `core_page_icon_url` | The practice's left nav sidebar | **Outlined Material Symbols glyph** — single-color (Hint tints it for hover / selected states), no background, no fill, matches Hint's nav style |
+| `app.surfaces[core_page].core_page_icon` / `core_page_icon_url` | The practice's left nav sidebar | **Outlined Material Symbols glyph** — single-color (Hint tints it for hover / selected states), no background, no fill, matches Hint's nav style |
 
 If you reuse the listing icon for the sidebar, the result is a saturated brand-color block that fights every other nav item visually. The full guideline is at <https://developers.hint.com/docs/partner-asset-guidelines> — bullet 1 (listing) vs bullet 3 (sidebar).
 
@@ -57,7 +57,7 @@ sed -E 's/ (height|width|fill)="[^"]*"//g'
 
 ## Encoding for the PATCH
 
-The `core_page_icon` field on the anchor takes a `data:image/svg+xml;base64,...` URI (max 5MB, but SVGs are kilobytes so this is irrelevant in practice). Full one-liner that fetches → cleans → encodes:
+The `core_page_icon` field on the surface takes a `data:image/svg+xml;base64,...` URI (max 5MB, but SVGs are kilobytes so this is irrelevant in practice). Full one-liner that fetches → cleans → encodes:
 
 ```bash
 GLYPH="science"
@@ -66,19 +66,19 @@ CLEAN_SVG=$(curl -sL "https://raw.githubusercontent.com/google/material-design-i
 ICON_DATA_URI="data:image/svg+xml;base64,$(printf '%s' "$CLEAN_SVG" | base64 | tr -d '\n')"
 ```
 
-Then attach it to the Core Page anchor:
+Then attach it to the Core Page surface:
 
 ```bash
-curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anchors/$ANCHOR_ID" \
+curl -s -X PATCH "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app/surfaces/$SURFACE_ID" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"anchor\": {
+  -d "{\"surface\": {
     \"core_page_icon\": \"$ICON_DATA_URI\",
     \"core_page_icon_label\": \"$LABEL\"
   }}"
 ```
 
-Confirm by `GET`-ing the anchor — `core_page_icon_url` (read-side field name; asymmetric with the PATCH-side `core_page_icon`) should now be a populated URL instead of `null`.
+Confirm by `GET`-ing the surface — `core_page_icon_url` (read-side field name; asymmetric with the PATCH-side `core_page_icon`) should now be a populated URL instead of `null`.
 
 ## Picking the label
 
@@ -89,11 +89,11 @@ Confirm by `GET`-ing the anchor — `core_page_icon_url` (read-side field name; 
 
 ## Verification
 
-After PATCHing, the anchor's GET response should show:
+After PATCHing, the surface's GET response should show:
 
 ```json
 {
-  "anchor": {
+  "surface": {
     "type": "core_page",
     "source_url": "https://<app>/hint/core_page",
     "core_page_icon_url": "https://...storage.../core_page_icon.svg",
@@ -105,5 +105,5 @@ After PATCHing, the anchor's GET response should show:
 If `core_page_icon_url` is still `null` after the PATCH lands, double-check:
 
 1. The data URI is well-formed (`data:image/svg+xml;base64,` prefix, no embedded newlines in the base64 chunk).
-2. The anchor's `type` is `core_page` — the icon fields are no-ops on `clinical_interaction` / `clinical_chart` / `settings` anchors.
+2. The surface's `type` is `core_page` — the icon fields are no-ops on `clinical_interaction` / `clinical_chart` / `settings` surfaces.
 3. The glyph name in the URL exists in Material Symbols — a 404 from `raw.githubusercontent.com` produces an empty `CLEAN_SVG` and a `data:image/svg+xml;base64,` URI with no payload, which Hint rejects.

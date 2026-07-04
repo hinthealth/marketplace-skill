@@ -6,7 +6,7 @@ Audits the partner's existing application against the Hint marketplace contract 
 
 The partner already has a working web app and wants to surface it inside Hint. Two flavors:
 
-- **Hosted by Hint**: the partner's code lives in their repo; Hint deploys it on Hint-managed infrastructure. After retrofit, push via `POST /partner/partner_products/:partner_product_id/app/revisions`. Hosted mode runs `node server.js` and currently supports Node.js only — other stacks must go Self-hosted.
+- **Hosted by Hint**: the partner's code lives in their repo; Hint deploys it on Hint-managed infrastructure. After retrofit, push via `POST /partner/products/:product_id/app/revisions`. Hosted mode runs `node server.js` and currently supports Node.js only — other stacks must go Self-hosted.
 - **Self-hosted**: the partner already deploys the app themselves (Vercel, AWS, on-prem). After retrofit, the partner redeploys on their own infra and registers the URLs with Hint. Any stack works.
 
 If the partner is starting from a blank repo, use [`create-app`](https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/create-app/SKILL.md) instead — that skill scaffolds from a known-good template.
@@ -84,7 +84,7 @@ Marketplace contract audit for <repo>:
   Route                                Status
   POST /hint/handshake                 ✓ present in src/server.js:42
   POST /hint/connect/:code             ✗ MISSING
-  GET  /hint/<anchor_type>             ✗ MISSING
+  GET  /hint/<surface_type>             ✗ MISSING
 
 Env-var hooks:
   HINT_API_URL          ✓ read at config/env.js:7
@@ -162,9 +162,9 @@ The handler must:
 3. Persist `{partner_id, practice_id, access_token}` keyed by `practice_id` in whatever session/practice store the app uses (Postgres if `DATABASE_URL` is set, in-memory only for demos).
 4. Return `{ status: 'connected' }`.
 
-### Snippet 3: `GET /hint/<anchor_type>?session_key=...`
+### Snippet 3: `GET /hint/<surface_type>?session_key=...`
 
-For each anchor type the partner plans to register (`core_page`, `clinical_interaction`, `settings`), generate a route handler that:
+For each surface type the partner plans to register (`core_page`, `clinical_interaction`, `settings`), generate a route handler that:
 
 1. Reads `session_key` from the query string.
 2. Looks up the session.
@@ -208,12 +208,12 @@ Zip the repo and POST it as a revision (same as `create-app`'s Hosted Mode Step 
 
 ```bash
 cd <repo_dir> && zip -r /tmp/retrofit-deploy.zip . -x ".git/*" -x "node_modules/*" -x ".env"
-curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/revisions" \
+curl -s -X POST "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app/revisions" \
   -H "Authorization: Bearer $API_KEY" \
   -F "code_archive=@/tmp/retrofit-deploy.zip;type=application/zip"
 ```
 
-Save the revision id, poll `GET /api/partner/partner_products/$PRODUCT_ID/app/revisions` until `status: pushed`, then poll `GET /api/partner/partner_products/$PRODUCT_ID/app/services` for the row with `status: "active"`. Save that `service_url` as `$APP_URL`. The auto-provisioned Postgres sibling that backs `DATABASE_URL` is managed entirely by Hint and isn't exposed via the API; `DATABASE_URL` is injected as an env var on the web service.
+Save the revision id, poll `GET /api/partner/products/$PRODUCT_ID/app/revisions` until `status: pushed`, then poll `GET /api/partner/products/$PRODUCT_ID/app/services` for the row with `status: "active"`. Save that `service_url` as `$APP_URL`. The auto-provisioned Postgres sibling that backs `DATABASE_URL` is managed entirely by Hint and isn't exposed via the API; `DATABASE_URL` is injected as an env var on the web service.
 
 **Pre-deploy checklist for Hosted Mode:**
 - The entry file MUST be `server.js` if Node.js (Hint's start command is `node server.js`).
@@ -228,7 +228,7 @@ Ask the partner to deploy the updated code wherever they normally deploy (Vercel
 
 ## Step 6: Register with Hint
 
-This step is identical to `create-app`'s Step 6 — set the backend config + handshake URL + anchors. `auth_type` and `redirect_url` live on the partner's backend, so fetch the backend id first (most partners have one default backend):
+This step is identical to `create-app`'s Step 6 — set the backend config + handshake URL + surfaces. `auth_type` and `redirect_url` live on the partner's backend, so fetch the backend id first (most partners have one default backend):
 
 ```bash
 curl -s "$HINT_API_URL/api/partner/backends" \
@@ -240,16 +240,16 @@ curl -s -X PATCH "$HINT_API_URL/api/partner/backends/$BACKEND_ID" \
   -H "Content-Type: application/json" \
   -d "{\"backend\": {\"auth_type\": \"automatic_headless\", \"redirect_url\": \"$APP_URL/hint/connect/\"}}"
 
-curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app" \
+curl -s -X PATCH "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d "{\"app\": {\"handshake_url\": \"$APP_URL/hint/handshake\"}}"
 
-# Create one anchor per surface the app implements. Examples:
-curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anchors" \
+# Create one surface per embed the app implements. Examples:
+curl -s -X POST "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app/surfaces" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"anchor\": {\"type\": \"core_page\", \"source_url\": \"$APP_URL/hint/core_page\"}}"
+  -d "{\"surface\": {\"type\": \"core_page\", \"source_url\": \"$APP_URL/hint/core_page\"}}"
 ```
 
 ## Step 7: Verify & Report
@@ -267,9 +267,9 @@ Hint Marketplace Retrofit Complete!
   Routes added:
     POST /hint/handshake          — HMAC-SHA256 signature verified
     POST /hint/connect/:code      — OAuth code → practice access token
-    GET  /hint/<anchor_type>      — embedded UI per anchor
+    GET  /hint/<surface_type>      — embedded UI per surface
 
-  Anchors registered: <list>
+  Surfaces registered: <list>
 
   To install + test in the Partner Portal:
     1. Open https://app.hint.com

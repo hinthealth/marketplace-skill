@@ -118,6 +118,6 @@ The `object` field carries the resource snapshot — its shape matches the corre
 
 ## Services list contains only web services
 
-`GET /api/partner/partner_products/:partner_product_id/app/services` returns the partner-managed web services (the ones running the partner's code). Pick the row with `status: 'active'` and read `service_url` for `$APP_URL`. Most apps have exactly one web service.
+`GET /api/partner/products/:product_id/app/services` returns the partner-managed web services (the ones running the partner's code). Pick the row with `status: 'active'` and read `service_url` for `$APP_URL`. Most apps have exactly one web service.
 
 The auto-provisioned Postgres sibling that backs `DATABASE_URL` is managed entirely by Hint and is not exposed via the API. The connection string is delivered via the `DATABASE_URL` env var injected into the web service.

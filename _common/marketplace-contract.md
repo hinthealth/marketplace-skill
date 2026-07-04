@@ -8,7 +8,7 @@ Every Hint marketplace app — regardless of stack or hosting — has to impleme
 |---|---|
 | `POST /hint/handshake` | Receives a signed payload from Hint at install/embed time. The app verifies the `X-Hint-Signature` header (HMAC-SHA256 of the request body, key = the partner's webhook secret), mints a session key, persists `{session_key, user, practice}` server-side, and returns the session key. |
 | `POST /hint/connect/:code` | Receives an OAuth code from Hint after a practice installs the app. The app exchanges the code at `POST $HINT_API_URL/api/oauth/tokens` for a practice-scoped access token and persists `{partner_id, practice_id, access_token}` keyed by practice. |
-| `GET /hint/<anchor_type>?session_key=...` | Renders the embedded UI for the surface type. Looks up the session by `session_key`, recovers the practice context, then renders the surface. `<anchor_type>` is one of `core_page`, `clinical_interaction`, or `settings`. |
+| `GET /hint/<surface_type>?session_key=...` | Renders the embedded UI for the surface type. Looks up the session by `session_key`, recovers the practice context, then renders the surface. `<surface_type>` is one of `core_page`, `clinical_interaction`, or `settings`. |
 
 ## Required env vars
 
@@ -76,7 +76,7 @@ Where the `practice_id` comes from:
 
 1. `POST /hint/handshake` arrives with a signed payload that includes `practice.id`. The app persists `{ session_key, user, practice_id, ... }` server-side.
 2. `POST /hint/connect/:code` returns `{ access_token, practice_id, ... }`. The app persists `{ practice_id, access_token }` keyed by `practice_id`.
-3. `GET /hint/<anchor_type>?session_key=...` looks up the session by `session_key` to recover the `practice_id`, then scopes every subsequent query to it.
+3. `GET /hint/<surface_type>?session_key=...` looks up the session by `session_key` to recover the `practice_id`, then scopes every subsequent query to it.
 
 A reference helper every handler should go through (Node.js form; port the shape to whatever stack the app uses):
 
@@ -124,11 +124,11 @@ A correctly-implemented app responds this way to unauthenticated probes:
 ```bash
 curl -sS -o /dev/null -w "GET /                              → HTTP %{http_code}\n" "$APP_URL/"
 curl -sS -o /dev/null -w "POST /hint/handshake (unsigned)    → HTTP %{http_code}\n" -X POST "$APP_URL/hint/handshake"
-curl -sS -o /dev/null -w "GET /hint/<anchor_type> (no sess)  → HTTP %{http_code}\n" "$APP_URL/hint/core_page"
+curl -sS -o /dev/null -w "GET /hint/<surface_type> (no sess)  → HTTP %{http_code}\n" "$APP_URL/hint/core_page"
 ```
 
 Expected:
 
 - `GET /` → 200 if the app implements a health check at `/`, 404 if it doesn't. Both are fine — the contract doesn't require a root route.
 - `POST /hint/handshake` unsigned → 401 (signature verification is working). A 200 means signature verification is missing — that's a critical security gap. A 404 means the route doesn't exist.
-- `GET /hint/<anchor_type>` without session → 200 or 401 (both acceptable; some apps render a "no session" placeholder, others reject).
+- `GET /hint/<surface_type>` without session → 200 or 401 (both acceptable; some apps render a "no session" placeholder, others reject).

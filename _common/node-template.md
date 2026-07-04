@@ -200,7 +200,7 @@ function verifySignature(rawBody, signature) {
   // (visible in Partner Portal → Webhook Settings → Webhooks Signature Key). The Hosted
   // Mode deploy platform injects this as `HINT_WEBHOOK_SECRET`. If you ever
   // rotate that key in the portal, re-push env vars via
-  // `PATCH /api/partner/partner_products/:partner_product_id/app/services/:id` so the deployed service picks up the
+  // `PATCH /api/partner/products/:product_id/app/services/:id` so the deployed service picks up the
   // new value — otherwise the env var goes stale and every handshake fails.
   if (!HINT_WEBHOOK_SECRET || !signature) {
     console.error('[handshake] verification skipped:', {
@@ -219,7 +219,7 @@ function verifySignature(rawBody, signature) {
         receivedSigPrefix: String(signature).slice(0, 14),
         expectedSigPrefix: expected.slice(0, 14),
         secretLast4: HINT_WEBHOOK_SECRET.slice(-4),
-        hint: 'Compare secretLast4 with the last 4 chars of Webhooks Signature Key in Partner Portal → Webhook Settings. If they differ, the env var is stale (re-push via PATCH /partner/partner_products/:partner_product_id/app/services/:id).',
+        hint: 'Compare secretLast4 with the last 4 chars of Webhooks Signature Key in Partner Portal → Webhook Settings. If they differ, the env var is stale (re-push via PATCH /partner/products/:product_id/app/services/:id).',
       });
     }
     return ok;

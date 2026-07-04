@@ -28,7 +28,7 @@ Set `$HINT_API_URL=https://api.hint.com` for both sandbox and live work (Partner
 Ask the partner:
 
 1. **Partner API key** — sandbox (`sbx-...`) or live. The audit runs against whichever environment the key belongs to.
-2. **App URL (optional)** — if the partner already knows their `$APP_URL`, save it. Otherwise the audit will discover it from `GET /partner/partner_products/:partner_product_id/app/services`.
+2. **App URL (optional)** — if the partner already knows their `$APP_URL`, save it. Otherwise the audit will discover it from `GET /partner/products/:product_id/app/services`.
 3. **Webhooks signature key (optional)** — needed for the "valid signature accepted" probe. Find it in the Partner Portal under **Webhook Settings → Webhooks Signature Key** (per backend; most partners have one). Without it, the audit can still run all the negative tests (forged signature, no signature) — just not the positive one.
 
 Verify the key works:
@@ -59,21 +59,21 @@ curl -s "$HINT_API_URL/api/partner/partner" -H "Authorization: Bearer $API_KEY"
 curl -s "$HINT_API_URL/api/partner/backends" -H "Authorization: Bearer $API_KEY"
 
 # App-level config (handshake URL + role mappings)
-curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app" -H "Authorization: Bearer $API_KEY"
+curl -s "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app" -H "Authorization: Bearer $API_KEY"
 
-# Anchors (per-surface source URLs)
-curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anchors" -H "Authorization: Bearer $API_KEY"
+# Surfaces (per-surface source URLs)
+curl -s "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app/surfaces" -H "Authorization: Bearer $API_KEY"
 
 # Services (deployed URLs, env vars, build/start commands)
-curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/services" -H "Authorization: Bearer $API_KEY"
+curl -s "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app/services" -H "Authorization: Bearer $API_KEY"
 ```
 
-Each of these returns a JSON document (services + anchors are bare arrays). Collect them — they're the inputs for the rest of the audit.
+Each of these returns a JSON document (services + surfaces are bare arrays). Collect them — they're the inputs for the rest of the audit.
 
 If `$APP_URL` wasn't provided, pick the row with `status: "active"` from the services list:
 
 ```bash
-APP_URL=$(curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/services" -H "Authorization: Bearer $API_KEY" \
+APP_URL=$(curl -s "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app/services" -H "Authorization: Bearer $API_KEY" \
   | python3 -c "import sys,json; print(next((s['service_url'] for s in json.load(sys.stdin) if s.get('status')=='active' and s.get('service_url')),''))")
 ```
 
@@ -92,16 +92,16 @@ Required fields:
 - `backend.redirect_url` — non-empty, starts with `https://`, ends with a trailing slash or `/hint/connect/` (from the `backends` response; localhost development URLs live in the separate `localhost_redirect_url` field on the backend, never here)
 - `backend.auth_type` — `automatic_headless` for production-ready apps
 - `app.handshake_url` — non-empty, starts with `https://`, points at the same origin as `$APP_URL`
-- `anchors` — at least one anchor registered, each with a non-empty `source_url` starting with `https://`
+- `surfaces` — at least one surface registered, each with a non-empty `source_url` starting with `https://`
 
 For each missing field, output a one-line remediation pointing at the relevant PATCH endpoint.
 
-### 3.2 Anchor URL reachability
+### 3.2 Surface URL reachability
 
-For each anchor:
+For each surface:
 
 ```bash
-curl -sS -o /dev/null -w "GET $ANCHOR_URL → HTTP %{http_code}\n" "$ANCHOR_URL"
+curl -sS -o /dev/null -w "GET $SURFACE_URL → HTTP %{http_code}\n" "$SURFACE_URL"
 ```
 
 PASS: 200 or 401 (some apps reject without a session; that's acceptable). FAIL: 404, 5xx, connection refused, TLS error.
@@ -143,16 +143,16 @@ SKIP: if the partner didn't provide the webhook secret.
 
 ### 3.6 HTTPS-only
 
-Walk `backend.redirect_url` (from `backends`), `app.handshake_url`, every `anchor.source_url`. Each must start with `https://` — the prod URL columns reject plain http. Localhost development URLs live in the separate `localhost_*` siblings (`localhost_redirect_url` and `localhost_webhook_url` on the backend, `localhost_handshake_url` on the app, `localhost_source_url` on each anchor), which are http-only and sandbox-partners-only; the per-session `localhost_mode` flag is computed by Hint, not set on the app. Do not move a localhost URL into a prod column.
+Walk `backend.redirect_url` (from `backends`), `app.handshake_url`, every `surface.source_url`. Each must start with `https://` — the prod URL columns reject plain http. Localhost development URLs live in the separate `localhost_*` siblings (`localhost_redirect_url` and `localhost_webhook_url` on the backend, `localhost_handshake_url` on the app, `localhost_source_url` on each surface), which are http-only and sandbox-partners-only; the per-session `localhost_mode` flag is computed by Hint, not set on the app. Do not move a localhost URL into a prod column.
 
 PASS: every prod URL is https. FAIL: any plain http URL in a prod column.
 
 ### 3.7 Env-var hygiene
 
-For each service in `GET /partner/partner_products/$PRODUCT_ID/app/services`, fetch the full record:
+For each service in `GET /partner/products/$PRODUCT_ID/app/services`, fetch the full record:
 
 ```bash
-curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/services/$SERVICE_ID" -H "Authorization: Bearer $API_KEY"
+curl -s "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app/services/$SERVICE_ID" -H "Authorization: Bearer $API_KEY"
 ```
 
 Inspect the response's `env_vars` (jsonb object of partner-supplied custom vars). Reserved keys MUST NOT appear there:
@@ -165,13 +165,13 @@ Inspect the response's `env_vars` (jsonb object of partner-supplied custom vars)
 
 PASS: no reserved keys in `env_vars`. FAIL: any of them present (Hint ignores them in practice — system vars always win — but their presence signals the partner thinks they're configuring something they aren't).
 
-### 3.8 Anchor / surface coverage
+### 3.8 Surface coverage
 
-Some surfaces are sensitive to misconfiguration. For each anchor:
+Some surfaces are sensitive to misconfiguration. For each surface:
 
 - `core_page`: `source_url` should end in `/hint/core_page` (convention; not enforced).
-- `clinical_interaction`: `source_url` should end in `/hint/clinical_interaction`. Anchor's `interaction_type` field should be set if the partner expects to filter by interaction type.
-- `settings`: `source_url` should end in `/hint/settings`. Anchor's `settings_label` should be set (otherwise the tab shows the app's generic name).
+- `clinical_interaction`: `source_url` should end in `/hint/clinical_interaction`. Surface's `interaction_type` field should be set if the partner expects to filter by interaction type.
+- `settings`: `source_url` should end in `/hint/settings`. Surface's `settings_label` should be set (otherwise the tab shows the app's generic name).
 
 The partner is free to host the surface at any path that returns valid HTML — the convention just makes templates and audit reports easier to read. WARN (not FAIL) on deviations.
 
@@ -220,14 +220,14 @@ CRITICAL (block release):
   ✗ 3.3 Handshake accepts unsigned requests — apps are leaking sessions. Fix signature verification immediately.
 
 HIGH:
-  ✗ 3.6 anchor 'core_page' source_url uses http:// (prod URLs must be https)
+  ✗ 3.6 surface 'core_page' source_url uses http:// (prod URLs must be https)
 
 MEDIUM:
   ⚠ 3.1 partner.email is empty
-  ⚠ 3.8 settings anchor has no settings_label
+  ⚠ 3.8 settings surface has no settings_label
 
 INFO / PASS:
-  ✓ 3.2 all anchor URLs reachable
+  ✓ 3.2 all surface URLs reachable
   ✓ 3.4 forged signatures rejected
   ✓ 3.5 valid signatures accepted (smoke test passed)
   ✓ 3.7 no reserved keys in custom env_vars
@@ -235,17 +235,17 @@ INFO / PASS:
 
 Remediation:
   - 3.3: Audit POST /hint/handshake handler. Confirm raw body is captured before JSON parsing and constant-time HMAC compare is used. See _common/marketplace-contract.md.
-  - 3.6: PATCH /partner/partner_products/$PRODUCT_ID/app/anchors/<anchor_id> with source_url starting in https://. For local development set the anchor's localhost_source_url instead — the prod source_url must stay https.
+  - 3.6: PATCH /partner/products/$PRODUCT_ID/app/surfaces/<surface_id> with source_url starting in https://. For local development set the surface's localhost_source_url instead — the prod source_url must stay https.
   - 3.1: PATCH /partner/partner -d '{"partner":{"email":"..."}}'.
-  - 3.8: PATCH /partner/partner_products/$PRODUCT_ID/app/anchors/<anchor_id> -d '{"anchor":{"settings_label":"..."}}'.
+  - 3.8: PATCH /partner/products/$PRODUCT_ID/app/surfaces/<surface_id> -d '{"surface":{"settings_label":"..."}}'.
 ```
 
 ## Step 5: Severity Levels
 
 - **CRITICAL** — security or functional break. App should not go live until fixed. Includes: handshake accepts unsigned requests, handshake accepts forged signatures, plain-http URLs leaking session keys, services in `provisioning_failed`, cross-practice data leak (3.10 probe fails).
-- **HIGH** — functional issue. App will fail in some real-world scenarios. Includes: anchor URLs returning 404 / 5xx, missing handshake_url, missing redirect_url.
-- **MEDIUM** — quality / UX issue. App works but looks incomplete. Includes: missing partner.email, missing anchor labels, partner.name placeholder text.
-- **WARN** — convention deviation. Not wrong, just unusual. Includes: anchor source_url paths that don't match the template convention.
+- **HIGH** — functional issue. App will fail in some real-world scenarios. Includes: surface URLs returning 404 / 5xx, missing handshake_url, missing redirect_url.
+- **MEDIUM** — quality / UX issue. App works but looks incomplete. Includes: missing partner.email, missing surface labels, partner.name placeholder text.
+- **WARN** — convention deviation. Not wrong, just unusual. Includes: surface source_url paths that don't match the template convention.
 - **INFO / PASS** — everything is fine, surfaced for confidence.
 
 ## Troubleshooting
