@@ -1,6 +1,6 @@
 # /hint-marketplace-fill-listing — Populate the Marketplace Listing
 
-Guides the partner through filling in their marketplace listing — the name, tagline, overview, feature highlights, customer quotes, categories, links, icon, screenshots, and pre-install preconditions that practices see when browsing the Hint marketplace.
+Guides the partner through filling in their marketplace listing — the name, tagline, overview, feature highlights, customer testimonials, categories, links, icon, screenshots, and pre-install preconditions that practices see when browsing the Hint marketplace.
 
 The skill is structured by **listing section**. Each section maps to its own public-API endpoint (one per concern, not one mega-PATCH) so the partner can update — or re-run — just the parts they want. The skill scrapes the partner's marketing site (with permission) and asks targeted questions to fill in what the scrape misses, then writes each section through on approval.
 
@@ -9,12 +9,12 @@ The skill is structured by **listing section**. Each section maps to its own pub
 | Section | Endpoint | Notes |
 |---|---|---|
 | **Identity** — `name`, `slug`, `type`, `summary`, `built_by_name`, `built_by_url`, `icon` | `PATCH /partner/partner_products/:id` | `slug` + `type` are create-only on the public API — Hint support changes them later. |
-| **Overview** — long description + overview images | `GET/PATCH /partner/partner_products/:id/overview` | Returns an empty in-memory overview if none exists; PATCH wraps id-keyed image reconciliation (edit-by-id, create-new, delete-omitted). |
-| **Highlights** — 3–5 feature cards (`title`, `description`, `image`, `position`) | `POST/PATCH/DELETE /partner/partner_products/:id/highlights[/:hid]` | `position` is integer; defaults to next slot via `acts_as_list`. |
-| **Quotes** — testimonials (`text`, `author`, `author_title`, `author_image`, `position`) | `POST/PATCH/DELETE /partner/partner_products/:id/quotes[/:qid]` | Field names are `text` (NOT `body`) and `author` (NOT `author_name`). |
+| **Overview** — long description + overview images | `GET/PATCH /partner/products/:id/overview` | Returns an empty in-memory overview if none exists; PATCH wraps id-keyed image reconciliation (edit-by-id, create-new, delete-omitted). |
+| **Highlights** — 3–5 feature cards (`title`, `description`, `image`, `position`) | `POST/PATCH/DELETE /partner/products/:id/highlights[/:hid]` | `position` is integer; defaults to next slot via `acts_as_list`. |
+| **Testimonials** — customer testimonials (`text`, `author`, `author_title`, `author_image`, `position`) | `POST/PATCH/DELETE /partner/products/:id/testimonials[/:tid]` | Field names are `text` (NOT `body`) and `author` (NOT `author_name`). The create/update body is wrapped in a `testimonial` key. |
 | **Categories** — 1–3 from Hint's catalog (`name`) | `POST /partner/partner_products/:id/categories` + `PATCH /partner/partner_products/:id/categories/:cid` + `DELETE /partner/partner_products/:id/categories/:cid` + `GET /partner/product_categories` (flat catalog) | POST creates the category-by-name if new and attaches; PATCH attaches an existing category by id. |
-| **Links** — supporting URLs (`link_type`, `value`, `title`, `utm_campaign`, `utm_content`, `position`) | `POST/PATCH/DELETE /partner/partner_products/:id/links[/:lid]` | `link_type` enum is `url \| phone \| email` (NOT free-text labels). `product_cta` is reserved and managed via the product Identity endpoint — not partner-settable here. |
-| **Preconditions** — pre-install steps (`type`, `url`) | `POST/PATCH/DELETE /partner/partner_products/:id/preconditions[/:pid]` | `type` enum is `external_account \| external_install \| onboarding_call`. |
+| **Links** — supporting URLs (`link_type`, `value`, `title`, `utm_campaign`, `utm_content`, `position`) | `POST/PATCH/DELETE /partner/products/:id/links[/:lid]` | `link_type` enum is `url \| phone \| email` (NOT free-text labels). `product_cta` is reserved and managed via the product Identity endpoint — not partner-settable here. |
+| **Preconditions** — pre-install steps (`type`, `url`) | `POST/PATCH/DELETE /partner/products/:id/preconditions[/:pid]` | `type` enum is `external_account \| external_install \| onboarding_call`. |
 
 Two sections are **intentionally not partner-settable** via the public API. Both are hinter-curated decisions on Hint's side:
 
@@ -25,7 +25,7 @@ Two sections are **intentionally not partner-settable** via the public API. Both
 
 ## Why per-section, not one mega-PATCH
 
-- Partners refresh different sections at different cadences (logo monthly, quotes when a new case study lands).
+- Partners refresh different sections at different cadences (logo monthly, testimonials when a new case study lands).
 - Per-section endpoints make permission scoping + audit logging cleaner — a partner can grant a 3rd-party tool "highlights write only".
 - An LLM-generated draft might be 90% right; the partner edits one section and re-applies it without overwriting the others.
 - The admin-side `Partner::Product::ReplaceListing` is one big writer because the hinter UI saves the entire LLM output at once. The partner-side workflow is incremental.
@@ -49,19 +49,19 @@ Ask the partner:
    ```
    Returns a JSON array; each element has `id` (a public id like `pp-xxxx`), `name`, `type`. Filter to `type == "app"` — listing fields below apply to app-type products. Save the product's `id` as `$PRODUCT_ID`.
 3. **Which sections do you want to fill?** Show the table above. Default to "all sections that are unset". The partner can opt-in/out per section.
-4. **(Optional) Marketing site URL.** If supplied, the skill fetches the page and extracts candidate content for each section (logo, summary, highlights, quotes, links).
-5. **(Optional) Existing assets** — local file paths for any images the partner wants to upload directly (icon, overview images, highlight thumbnails, quote headshots).
+4. **(Optional) Marketing site URL.** If supplied, the skill fetches the page and extracts candidate content for each section (logo, summary, highlights, testimonials, links).
+5. **(Optional) Existing assets** — local file paths for any images the partner wants to upload directly (icon, overview images, highlight thumbnails, testimonial headshots).
 
 Read current state for the chosen product:
 
 ```bash
 curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID" -H "Authorization: Bearer $API_KEY"
-curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/overview" -H "Authorization: Bearer $API_KEY"
-curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/highlights" -H "Authorization: Bearer $API_KEY"
-curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/quotes" -H "Authorization: Bearer $API_KEY"
+curl -s "$HINT_API_URL/api/partner/products/$PRODUCT_ID/overview" -H "Authorization: Bearer $API_KEY"
+curl -s "$HINT_API_URL/api/partner/products/$PRODUCT_ID/highlights" -H "Authorization: Bearer $API_KEY"
+curl -s "$HINT_API_URL/api/partner/products/$PRODUCT_ID/testimonials" -H "Authorization: Bearer $API_KEY"
 curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/categories" -H "Authorization: Bearer $API_KEY"
-curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/links" -H "Authorization: Bearer $API_KEY"
-curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/preconditions" -H "Authorization: Bearer $API_KEY"
+curl -s "$HINT_API_URL/api/partner/products/$PRODUCT_ID/links" -H "Authorization: Bearer $API_KEY"
+curl -s "$HINT_API_URL/api/partner/products/$PRODUCT_ID/preconditions" -H "Authorization: Bearer $API_KEY"
 ```
 
 ## Step 2: Scrape + Q&A — per section
@@ -77,24 +77,24 @@ For each section the partner opted into, gather inputs in this order: existing s
 
 ### 2.2 Overview (`description`, `images[]`)
 
-- **Existing**: `description` + `images[]` from `GET /partner/partner_products/:id/overview`. The endpoint returns an empty (in-memory) overview when none exists — no need to special-case 404.
+- **Existing**: `description` + `images[]` from `GET /partner/products/:id/overview`. The endpoint returns an empty (in-memory) overview when none exists — no need to special-case 404.
 - **Scrape**: first two paragraphs of the marketing page body after the hero → candidate `description` (cap at 500 chars, 2-3 sentences). All non-decorative `<img>` tags in the hero / "features" section → candidate `images` (max 4, surface URLs for the partner to confirm before download).
 - **Q&A**: trim or replace any candidate the partner doesn't approve. Don't auto-download images the partner hasn't OK'd — show URLs first.
 - **Images are id-keyed**. Existing images have an `id` you can send back to update in place, omit to delete, or leave off for new uploads. Don't destroy-and-rebuild — pass through ids you want to keep.
 
 ### 2.3 Highlights (3–5 entries; each `title`, `description`, `image`, `position`)
 
-- **Existing**: `GET /partner/partner_products/:id/highlights` returns the array.
+- **Existing**: `GET /partner/products/:id/highlights` returns the array.
 - **Scrape**: `<h2>+<p>` pairs in the marketing page's features section → candidates. Cap title at ~5 words, description at ~140 chars. Look for an `<img>` next to each pair → candidate `image`.
 - **Q&A**: confirm or rewrite each title/description. Ideal count is 3–5 — if the scrape yields more, ask the partner to pick.
 - `position` is an integer; if omitted, it appends to the end via `acts_as_list`.
 
-### 2.4 Quotes (testimonials; each `text`, `author`, `author_title`, `author_image`, `position`)
+### 2.4 Testimonials (each `text`, `author`, `author_title`, `author_image`, `position`)
 
-- **Existing**: `GET /partner/partner_products/:id/quotes`.
-- **Field names** (easy to get wrong): the body field is `text`, NOT `body`. The attribution field is `author`, NOT `author_name`. `author_title` is the "Role, Company" line.
-- **Scrape**: `<blockquote>`, `<div class*="testimonial">`, or `<q>` elements → candidates. Strip surrounding quote marks. **Never invent quotes** — if the marketing page has none, return empty and ask if the partner wants to manually add any.
-- **Q&A**: confirm each quote verbatim. Don't paraphrase.
+- **Existing**: `GET /partner/products/:id/testimonials`.
+- **Field names** (easy to get wrong): the body field is `text`, NOT `body`. The attribution field is `author`, NOT `author_name`. `author_title` is the "Role, Company" line. The create/update body is wrapped in a `testimonial` key.
+- **Scrape**: `<blockquote>`, `<div class*="testimonial">`, or `<q>` elements → candidates. Strip surrounding quote marks. **Never invent testimonials** — if the marketing page has none, return empty and ask if the partner wants to manually add any.
+- **Q&A**: confirm each testimonial verbatim. Don't paraphrase.
 
 ### 2.5 Categories (1–3 entries)
 
@@ -106,7 +106,7 @@ For each section the partner opted into, gather inputs in this order: existing s
 
 ### 2.6 Links (supporting URLs)
 
-- **Existing**: `GET /partner/partner_products/:id/links`.
+- **Existing**: `GET /partner/products/:id/links`.
 - **Field names**: `link_type` (enum: `url` / `phone` / `email`), `value` (the URL / phone number / email address), `title` (display label), optional `utm_campaign` (defaults to `hint_marketplace`), optional `utm_content`, optional `position`.
 - **`product_cta` is reserved**. It's the in-app install CTA managed via the main product endpoint — not partner-settable here.
 - **Scrape**: header / footer nav links matching `docs`, `help`, `pricing`, `blog`, `case studies`. Filter out social media + same-page anchors. For email/phone links, decide between `link_type: email`/`phone` based on the `mailto:` / `tel:` scheme.
@@ -114,7 +114,7 @@ For each section the partner opted into, gather inputs in this order: existing s
 
 ### 2.7 Preconditions (pre-install steps)
 
-- **Existing**: `GET /partner/partner_products/:id/preconditions`.
+- **Existing**: `GET /partner/products/:id/preconditions`.
 - **Field names**: `type` (enum: `external_account` / `external_install` / `onboarding_call`), `url` (the destination — signup page, install link, or scheduling page depending on `type`).
 - A precondition is something the practice must complete BEFORE installing — typically creating an account on the partner's side, installing a companion native app, or scheduling onboarding.
 - **Q&A**: "Does a practice need to do anything outside Hint before installing your app? (sign up on your site, install a desktop app, book a call?)" Map the answer to one of the three `type` values.
@@ -136,7 +136,7 @@ Highlights (3 new):
   + "HIPAA-compliant"    — "End-to-end encrypted, BAA-covered"
   + "Audit log built in" — "Every message is logged with the staffer who sent it"
 
-Quotes (1 new):
+Testimonials (1 new):
   + "Acme has cut our after-hours call volume in half." — Sarah Chen, Office Manager, Mesa Family Practice
 
 Categories (2 new):
@@ -162,23 +162,28 @@ curl -sS -w "\nHTTP %{http_code}\n" -X PATCH "$HINT_API_URL/api/partner/partner_
   -H "Content-Type: application/json" \
   -d '{"name": "Acme Health Connect", "summary": "…", "built_by_name": "Acme", "built_by_url": "https://acme.example.com", "icon": "data:image/png;base64,…"}'
 
-# Overview — PATCH /partner/partner_products/:id/overview
-curl -sS -w "\nHTTP %{http_code}\n" -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/overview" \
+# Overview — PATCH /partner/products/:id/overview
+curl -sS -w "\nHTTP %{http_code}\n" -X PATCH "$HINT_API_URL/api/partner/products/$PRODUCT_ID/overview" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"description": "…", "images": [{"url": "data:image/png;base64,…", "alt": "…"}]}'
 
-# Highlights — POST /partner/partner_products/:id/highlights per row
+# Highlights — POST /partner/products/:id/highlights per row
 for HL_JSON in "$@"; do
-  curl -sS -w "\nHTTP %{http_code}\n" -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/highlights" \
+  curl -sS -w "\nHTTP %{http_code}\n" -X POST "$HINT_API_URL/api/partner/products/$PRODUCT_ID/highlights" \
     -H "Authorization: Bearer $API_KEY" \
     -H "Content-Type: application/json" \
     -d "$HL_JSON"
   # body: {"title": "…", "description": "…", "image": "data:image/png;base64,…", "position": 1}
 done
 
-# Quotes — same shape, field names are text/author/author_title:
-#   {"text": "…", "author": "Sarah Chen", "author_title": "Office Manager, Mesa Family Practice", "author_image": "data:image/png;base64,…", "position": 1}
+# Testimonials — POST /partner/products/:id/testimonials, body wrapped in a `testimonial` key,
+# field names are text/author/author_title:
+#   {"testimonial": {"text": "…", "author": "Sarah Chen", "author_title": "Office Manager, Mesa Family Practice", "author_image": "data:image/png;base64,…", "position": 1}}
+curl -sS -w "\nHTTP %{http_code}\n" -X POST "$HINT_API_URL/api/partner/products/$PRODUCT_ID/testimonials" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"testimonial": {"text": "…", "author": "Sarah Chen", "author_title": "Office Manager, Mesa Family Practice", "position": 1}}'
 
 # Categories — POST by name (creates+attaches if new), or PATCH by id (attach existing):
 curl -sS -w "\nHTTP %{http_code}\n" -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/categories" \
@@ -187,21 +192,21 @@ curl -sS -w "\nHTTP %{http_code}\n" -X POST "$HINT_API_URL/api/partner/partner_p
   -d '{"name": "Communication"}'
 
 # Links — note link_type enum + value (not "url"):
-curl -sS -w "\nHTTP %{http_code}\n" -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/links" \
+curl -sS -w "\nHTTP %{http_code}\n" -X POST "$HINT_API_URL/api/partner/products/$PRODUCT_ID/links" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"link_type": "url", "value": "https://acme.example.com/docs", "title": "Documentation", "position": 1}'
 
 # Preconditions (this one still requires the `precondition` wrapper key):
-curl -sS -w "\nHTTP %{http_code}\n" -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/preconditions" \
+curl -sS -w "\nHTTP %{http_code}\n" -X POST "$HINT_API_URL/api/partner/products/$PRODUCT_ID/preconditions" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"precondition": {"type": "external_account", "url": "https://acme.example.com/signup"}}'
 ```
 
-For image uploads (icon, overview images, highlight images, quote headshots): convert to base64 data URI client-side before sending. The platform's `ActiveStorageDataUri` initializer decodes data URIs into attachments automatically.
+For image uploads (icon, overview images, highlight images, testimonial headshots): convert to base64 data URI client-side before sending. The platform's `ActiveStorageDataUri` initializer decodes data URIs into attachments automatically.
 
-Supported MIME types: `image/png`, `image/jpeg`, `image/svg+xml`, `image/gif`. **Prefer SVG** for icons and dashboard/feature illustrations — marketplace cards render at multiple sizes (badge, listing card, hero), SVG stays crisp at every zoom level, and the files are routinely ~10× smaller than equivalent PNGs (≈9 KB vs ≈80–150 KB for typical listing assets). Use PNG / JPEG only for photographs (quote headshots, product screenshots).
+Supported MIME types: `image/png`, `image/jpeg`, `image/svg+xml`, `image/gif`. **Prefer SVG** for icons and dashboard/feature illustrations — marketplace cards render at multiple sizes (badge, listing card, hero), SVG stays crisp at every zoom level, and the files are routinely ~10× smaller than equivalent PNGs (≈9 KB vs ≈80–150 KB for typical listing assets). Use PNG / JPEG only for photographs (testimonial headshots, product screenshots).
 
 ```bash
 # PNG (photos / screenshots):
@@ -213,7 +218,7 @@ DATA_URI="data:image/svg+xml;base64,$(base64 -i path/to/icon.svg | tr -d '\n')"
 
 ### Overview-image reconciliation (`images[]`)
 
-`PATCH /partner_products/:id/overview` with an `images[]` array uses **id-keyed reconciliation**: entries with a matching `id` are edited in place, entries without an `id` are created, any existing images **not represented** in the array are deleted. Omitting the `images` key entirely leaves images unchanged.
+`PATCH /partner/products/:id/overview` with an `images[]` array uses **id-keyed reconciliation**: entries with a matching `id` are edited in place, entries without an `id` are created, any existing images **not represented** in the array are deleted. Omitting the `images` key entirely leaves images unchanged.
 
 This lets a single PATCH swap the hero image without an explicit DELETE step:
 
@@ -243,7 +248,7 @@ Listing applied:
   ✓ Identity       — name, summary, built_by_name, icon updated
   ✓ Overview       — description + 3 images uploaded
   ✓ Highlights     — 3 entries created
-  ✓ Quotes         — 1 entry created
+  ✓ Testimonials   — 1 entry created
   ✓ Categories     — 2 categories attached
   - Links          — skipped (no changes)
   ✓ Preconditions  — 1 step set

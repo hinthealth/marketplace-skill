@@ -34,7 +34,7 @@ Ask the user three things:
    - **Core Page** (`core_page`) — a full-page app accessible from the sidebar. Best for dashboards, tools, and standalone features.
    - **Clinical Interaction** (`clinical_interaction`) — appears within clinical workflows, in the context of a specific patient/interaction. Best for clinical tools, lab viewers, and patient-specific features. Receives patient context via `HintSDK.currentPatient` and `HintSDK.interaction`.
    - **Clinical Chart** (`clinical_chart`) — embedded inside the patient chart view, alongside Hint's native chart sections. Best for chart-resident widgets (latest labs, risk scores, care plan summaries) that should always be visible whenever the practitioner has a chart open, not just during an active interaction. Receives `HintSDK.currentPatient` (no `interaction` since the surface lives outside the interaction timeline).
-   - **Settings** (`settings`) — embedded inside the practice's settings area, alongside Hint's own configuration tabs. Best for partner-specific configuration UI (API keys the practice needs to enter, feature toggles, sync schedules, etc.). The anchor is labeled via `settings_label` on the API (defaults to the app name).
+   - **Settings** (`settings`) — embedded inside the practice's settings area, alongside Hint's own configuration tabs. Best for partner-specific configuration UI (API keys the practice needs to enter, feature toggles, sync schedules, etc.). The surface is labeled via `settings_label` on the API (defaults to the app name).
 
 3. **How do you want to host it?**
    - **Hosted** — Hint generates the app and runs it on Hint-managed infrastructure. Easiest path; you write nothing yourself. Pick this unless you have a specific reason not to. Hosted Mode runs `node server.js` and currently supports Node.js only.
@@ -80,7 +80,7 @@ Returns a bare JSON array. Most partners have exactly one product; pick the firs
 **If the partner has no product yet — or is deliberately adding another** — create one with `POST /api/partner/partner_products` (a second product only succeeds if the partner has `allow_multiple_products` set; otherwise the create returns "Partner already has a product", which means they aren't approved for multiple products — point them at [devsupport@hint.com](mailto:devsupport@hint.com)). Every product attaches to exactly one of the partner's backends, and the create payload decides which:
 
 - **One backend (the common case):** omit both `partner_backend` and `create_new_backend`. The API attaches the partner's default backend.
-- **The partner has more than one backend:** the API won't guess — omitting both is rejected with a 422. List the backends first (`GET /api/partner/partner_backends`), then pass either `partner_backend: "pbnd-XXXXXXXXXX"` to reuse a specific existing one, or `create_new_backend: true` to mint a fresh backend for this product. Confirm the choice with the user; for an additional product that should stay isolated, default to `create_new_backend: true` and reuse only when the user says it shares an existing backend.
+- **The partner has more than one backend:** the API won't guess — omitting both is rejected with a 422. List the backends first (`GET /api/partner/backends`), then pass either `partner_backend: "pbnd-XXXXXXXXXX"` to reuse a specific existing one, or `create_new_backend: true` to mint a fresh backend for this product. Confirm the choice with the user; for an additional product that should stay isolated, default to `create_new_backend: true` and reuse only when the user says it shares an existing backend.
 - **Never send both** `partner_backend` and `create_new_backend` — that's a 422.
 
 ```bash
@@ -102,7 +102,7 @@ If POST/PATCH calls later return "Partner product type must be app", that's the 
 
 Also check if the app already exists:
 ```bash
-curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app" \
+curl -s "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app" \
   -H "Authorization: Bearer $API_KEY"
 ```
 
@@ -110,7 +110,7 @@ curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app" \
 
 If no app exists:
 ```bash
-curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app" \
+curl -s -X POST "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json"
 ```
@@ -162,7 +162,7 @@ Default to a straightforward "fetch on every render" loop — the `hintApi()` wr
 If the app needs custom environment variables (third-party API keys, feature flags, etc.) or a different build/start command, create the service explicitly first:
 
 ```bash
-curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/services" \
+curl -s -X POST "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app/services" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -180,11 +180,11 @@ Save the `id` from the response. If the app doesn't need custom config, **skip t
 
 The reserved env vars `HINT_API_URL`, `HINT_API_KEY`, `HINT_PARTNER_ID`, `HINT_WEBHOOK_SECRET`, and `DATABASE_URL` are managed by Hint and always present — partner-supplied values for those keys are ignored. See [`_common/api-conventions.md`](../_common/api-conventions.md#reserved-env-vars).
 
-To update config on an existing service later: `PATCH /api/partner/partner_products/$PRODUCT_ID/app/services/<id>` with the same body shape. Env var changes propagate immediately; `build_command` / `start_command` changes take effect on the next revision deploy.
+To update config on an existing service later: `PATCH /api/partner/products/$PRODUCT_ID/app/services/<id>` with the same body shape. Env var changes propagate immediately; `build_command` / `start_command` changes take effect on the next revision deploy.
 
 ## Step 5: Deploy
 
-> **Pre-deploy checklist (managed-hosted mode only).** In managed-hosted mode the `custom_apps_enabled` flag on the partner gates whether revisions / services / anchors can be created at all. If it's off, the first revision POST below returns 403 / "Custom apps are not enabled for this partner". Verify the setting before deploying:
+> **Pre-deploy checklist (managed-hosted mode only).** In managed-hosted mode the `custom_apps_enabled` flag on the partner gates whether revisions / services / surfaces can be created at all. If it's off, the first revision POST below returns 403 / "Custom apps are not enabled for this partner". Verify the setting before deploying:
 >
 > ```bash
 > curl -s "$HINT_API_URL/api/partner/partner" -H "Authorization: Bearer $API_KEY" \
@@ -199,17 +199,17 @@ Zip the app and POST it as a revision. If no service exists yet, the first deplo
 
 ```bash
 cd <app_dir> && zip -r /tmp/app-deploy.zip .
-curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/revisions" \
+curl -s -X POST "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app/revisions" \
   -H "Authorization: Bearer $API_KEY" \
   -F "code_archive=@/tmp/app-deploy.zip;type=application/zip"
 ```
 
 The response contains the revision row: `{ "id": "prev-...", "status": "pending", ... }`. Save the revision id as `$REV_ID`.
 
-Poll the revision until `status` flips from `pending` to `pushed` (extracted + pushed — usually ~5s) or `failed`. `GET /api/partner/partner_products/$PRODUCT_ID/app/revisions` returns a **bare JSON array**, so handle it directly:
+Poll the revision until `status` flips from `pending` to `pushed` (extracted + pushed — usually ~5s) or `failed`. `GET /api/partner/products/$PRODUCT_ID/app/revisions` returns a **bare JSON array**, so handle it directly:
 
 ```bash
-curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/revisions" \
+curl -s "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app/revisions" \
   -H "Authorization: Bearer $API_KEY" \
   | python3 -c "import sys,json; print(next((r['status'] for r in json.load(sys.stdin) if r['id']=='$REV_ID'),'?'))"
 ```
@@ -217,7 +217,7 @@ curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/revisions" \
 Once status is `pushed`, get the service URL. The services list is a bare array of the partner-managed web service(s). Pick the row with `status: "active"`:
 
 ```bash
-curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/services" \
+curl -s "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app/services" \
   -H "Authorization: Bearer $API_KEY" \
   | python3 -c "import sys,json; print(next((s['service_url'] for s in json.load(sys.stdin) if s.get('status')=='active' and s.get('service_url')),''))"
 ```
@@ -230,7 +230,7 @@ Save the resulting URL as `$APP_URL`. Then poll it directly until it returns 200
 curl -s -o /dev/null -w '%{http_code}' $APP_URL/
 ```
 
-Poll every 5 seconds. Cap at 5 minutes — if you don't see a 200 by then, treat it as a real failure. Pull the runtime logs to see why (`GET /api/partner/partner_products/$PRODUCT_ID/app/services/:id/logs`, or in the Partner Portal under the service row's "View logs" button — see [Viewing logs](#viewing-logs) below). Escalate to [devsupport@hint.com](mailto:devsupport@hint.com) with the revision id only if the logs aren't conclusive. 502s and "Application failed to respond" during the first minute are normal — the container is still booting. The progression you should expect:
+Poll every 5 seconds. Cap at 5 minutes — if you don't see a 200 by then, treat it as a real failure. Pull the runtime logs to see why (`GET /api/partner/products/$PRODUCT_ID/app/services/:id/logs`, or in the Partner Portal under the service row's "View logs" button — see [Viewing logs](#viewing-logs) below). Escalate to [devsupport@hint.com](mailto:devsupport@hint.com) with the revision id only if the logs aren't conclusive. 502s and "Application failed to respond" during the first minute are normal — the container is still booting. The progression you should expect:
 
 - t=0s (`status: pushed`): container image is built and pushed; the platform is spinning up the runtime
 - t=10-50s: 502s from the edge while the container is still warming
@@ -261,7 +261,7 @@ Validate by hitting the partner's URL — if any of these returns something othe
 ```bash
 curl -sS -o /dev/null -w "GET /  → HTTP %{http_code}\n" "$APP_URL/"
 curl -sS -o /dev/null -w "POST /hint/handshake (unsigned, expect 401) → HTTP %{http_code}\n" -X POST "$APP_URL/hint/handshake"
-curl -sS -o /dev/null -w "GET  /hint/<anchor_type> (no session, expect 200/401) → HTTP %{http_code}\n" "$APP_URL/hint/core_page"
+curl -sS -o /dev/null -w "GET  /hint/<surface_type> (no session, expect 200/401) → HTTP %{http_code}\n" "$APP_URL/hint/core_page"
 ```
 
 A 401 on `/hint/handshake` is the correct response to an unsigned request — that confirms signature verification is wired up. A 200 or 404 there is a red flag. `GET /` returning 404 is fine if the app doesn't implement a health check at `/`.
@@ -276,7 +276,7 @@ Once `$APP_URL` is known (Hint-provisioned in Hosted Mode, partner-supplied in S
 
 > **In managed-hosted mode**, the install flow itself does NOT consult `auth_type` or `redirect_url` — the integration is created and activated programmatically by Hint. But the Activation Settings tab in the partner's portal still reads from those fields, and a practice/partner staring at "auth_type: manual (Not Recommended)" right after install will think the skill didn't finish. **Set them anyway** so the UI looks consistent with what actually shipped.
 
-**`post_activation_action` — only set when the app has a `core_page` anchor.** After a practice activates a partner app, Hint can navigate the user to the app's embedded core page surface. The product-level `post_activation_action` enum controls this — set it to `"redirect_to_core_page_anchor"` and Hint resolves to the app's core page route (`/apps/<product-slug>`) automatically; leave it unset (`null`) for `clinical_interaction`-only or `settings`-only apps that have no standalone landing surface. Without it set on a full-page app, every install lands the practice owner back on the marketplace listing page they just came from, which is dead weight when the user's intent is "use the app now". Mixed surfaces that include `core_page`: set it.
+**`post_activation_action` — only set when the app has a `core_page` surface.** After a practice activates a partner app, Hint can navigate the user to the app's embedded core page surface. The product-level `post_activation_action` enum controls this — set it to `"redirect_to_core_page_anchor"` and Hint resolves to the app's core page route (`/apps/<product-slug>`) automatically; leave it unset (`null`) for `clinical_interaction`-only or `settings`-only apps that have no standalone landing surface. Without it set on a full-page app, every install lands the practice owner back on the marketplace listing page they just came from, which is dead weight when the user's intent is "use the app now". Mixed surfaces that include `core_page`: set it.
 
 # `auth_type` and `redirect_url` live on the partner's **backend** — the connection
 # settings for one of the partner's environments. The product is attached to exactly
@@ -296,10 +296,10 @@ curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID" \
 # In managed-hosted mode this PATCH is purely cosmetic for the Activation
 # Settings UI (install fires through a different code path); set it anyway
 # so the tab doesn't read "Not Recommended" right after install.
-curl -s -X PATCH "$HINT_API_URL/api/partner/partner_backends/$BACKEND_ID" \
+curl -s -X PATCH "$HINT_API_URL/api/partner/backends/$BACKEND_ID" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"partner_backend\": {
+  -d "{\"backend\": {
         \"auth_type\": \"automatic_headless\",
         \"redirect_url\": \"$APP_URL/hint/connect/\"
       }}"
@@ -308,30 +308,30 @@ curl -s -X PATCH "$HINT_API_URL/api/partner/partner_backends/$BACKEND_ID" \
 # if the app is clinical_interaction-only or settings-only — the field
 # defaults to null which means "stay on the marketplace page after activation".
 #
-# ---- Only if the app has a core_page anchor ----
+# ---- Only if the app has a core_page surface ----
 curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d "{\"partner_product\": {\"post_activation_action\": \"redirect_to_core_page_anchor\"}}"
 
 # Set handshake URL
-curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app" \
+curl -s -X PATCH "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d "{\"app\": {\"handshake_url\": \"$APP_URL/hint/handshake\"}}"
 
-# Create anchor — use the surface type chosen by the user.
+# Create surface — use the surface type chosen by the user.
 #
-# For core_page: the anchor itself is created here. The sidebar icon
+# For core_page: the surface itself is created here. The sidebar icon
 # (core_page_icon + core_page_icon_label) is set in a second PATCH
 # call below — keeps the create call minimal and lets the icon
-# encoding happen against a known $ANCHOR_ID.
-curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anchors" \
+# encoding happen against a known $SURFACE_ID.
+curl -s -X POST "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app/surfaces" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"anchor\": {\"type\": \"core_page\", \"source_url\": \"$APP_URL/hint/core_page\"}}"
+  -d "{\"surface\": {\"type\": \"core_page\", \"source_url\": \"$APP_URL/hint/core_page\"}}"
 
-# Then PATCH the sidebar icon + label onto the just-created anchor.
+# Then PATCH the sidebar icon + label onto the just-created surface.
 # Read _common/sidebar-icons.md for the full rationale, the cleanup rule,
 # and verification steps. Short version: the sidebar icon is NOT the
 # listing icon (listing = filled brand mark on the marketplace tile;
@@ -352,7 +352,7 @@ curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anch
 # a short form — never auto-truncate mid-word.
 GLYPH="science"   # ← any Material Symbols name from the picker
 LABEL="<short label, ≤14 chars>"
-ANCHOR_ID="<core_page anchor id from the POST response above>"
+SURFACE_ID="<core_page surface id from the POST response above>"
 
 # Fetch the outlined-400 SVG from the canonical Google repo, strip
 # height/width/fill so it inherits sizing + currentColor, base64-encode.
@@ -360,34 +360,34 @@ CLEAN_SVG=$(curl -sL "https://raw.githubusercontent.com/google/material-design-i
   | sed -E 's/ (height|width|fill)="[^"]*"//g')
 ICON_DATA_URI="data:image/svg+xml;base64,$(printf '%s' "$CLEAN_SVG" | base64 | tr -d '\n')"
 
-curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anchors/$ANCHOR_ID" \
+curl -s -X PATCH "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app/surfaces/$SURFACE_ID" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"anchor\": {
+  -d "{\"surface\": {
     \"core_page_icon\": \"$ICON_DATA_URI\",
     \"core_page_icon_label\": \"$LABEL\"
   }}"
 
 # For clinical_interaction:
-curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anchors" \
+curl -s -X POST "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app/surfaces" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"anchor\": {\"type\": \"clinical_interaction\", \"source_url\": \"$APP_URL/hint/clinical_interaction\"}}"
+  -d "{\"surface\": {\"type\": \"clinical_interaction\", \"source_url\": \"$APP_URL/hint/clinical_interaction\"}}"
 
 # For clinical_chart:
-curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anchors" \
+curl -s -X POST "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app/surfaces" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"anchor\": {\"type\": \"clinical_chart\", \"source_url\": \"$APP_URL/hint/clinical_chart\"}}"
+  -d "{\"surface\": {\"type\": \"clinical_chart\", \"source_url\": \"$APP_URL/hint/clinical_chart\"}}"
 
 # For settings:
-curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/anchors" \
+curl -s -X POST "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app/surfaces" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"anchor\": {\"type\": \"settings\", \"source_url\": \"$APP_URL/hint/settings\", \"settings_label\": \"<App Name> Settings\"}}"
+  -d "{\"surface\": {\"type\": \"settings\", \"source_url\": \"$APP_URL/hint/settings\", \"settings_label\": \"<App Name> Settings\"}}"
 ```
 
-An app can have one anchor of each type at most (`core_page`, `clinical_interaction`, `clinical_chart`, `settings`) — pick the ones the app actually needs. Most apps register one, complex ones register two or three.
+An app can have one surface of each type at most (`core_page`, `clinical_interaction`, `clinical_chart`, `settings`) — pick the ones the app actually needs. Most apps register one, complex ones register two or three.
 
 > **`core_page` sidebar icon — DO NOT reuse the listing icon.** The listing icon (`partner_product.icon`, set in Step 6.5) is a filled brand mark for the marketplace tile. The sidebar icon is an outlined Material-Symbols-style glyph that lives next to Patients / Employers / Reports / Admin in the practice's left nav and adapts to Hint's hover / selected states. Two distinct assets — reusing the listing icon produces a saturated brand-color block that fights every other nav item. Always PATCH a Material Symbols Outlined glyph at weight 400 (fetched from `raw.githubusercontent.com/google/material-design-icons`) with `height` / `width` / `fill` attributes stripped — see the curl above for the one-liner. Full picker + cleanup rule + verification steps in [`_common/sidebar-icons.md`](../_common/sidebar-icons.md). The full asset guideline is documented at <https://developers.hint.com/docs/partner-asset-guidelines> (bullet 1 = listing, bullet 3 = sidebar). The `core_page_icon_label` shows as a tooltip on desktop and visible text on mobile sidebars — keep it ≤14 chars.
 
@@ -412,7 +412,7 @@ curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID" \
   }"
 ```
 
-These 5 fields cover the listing card. **Overview, Highlights, Quotes, Categories, Links, and Preconditions are also partner-settable** via their own per-section endpoints — use the [`fill-listing`](https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/fill-listing/SKILL.md) skill for the guided workflow, or hit `/api/partner/partner_products/$PRODUCT_ID/{overview|highlights|quotes|categories|links|preconditions}` directly. Pricing and install Requirements are NOT partner-settable — those are hinter-curated decisions; email [devsupport@hint.com](mailto:devsupport@hint.com) to change them.
+These 5 fields cover the listing card. **Overview, Highlights, Testimonials, Categories, Links, and Preconditions are also partner-settable** via their own per-section endpoints — use the [`fill-listing`](https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/fill-listing/SKILL.md) skill for the guided workflow, or hit them directly at `/api/partner/products/$PRODUCT_ID/{overview|highlights|testimonials|links|preconditions}` (and `/api/partner/partner_products/$PRODUCT_ID/categories`). Pricing and install Requirements are NOT partner-settable — those are hinter-curated decisions; email [devsupport@hint.com](mailto:devsupport@hint.com) to change them.
 
 The `slug` and `type` fields are set when the product is first created and **are not editable via API** afterwards — if the user wants to rename the URL slug or change product type after creation, they have to email [devsupport@hint.com](mailto:devsupport@hint.com).
 
@@ -474,16 +474,16 @@ Hint Marketplace App Set Up!
 **Hosted Mode** — re-run the deploy:
 ```bash
 cd <app_dir> && zip -r /tmp/app-deploy.zip .
-curl -s -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/revisions" \
+curl -s -X POST "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app/revisions" \
   -H "Authorization: Bearer $API_KEY" \
   -F "code_archive=@/tmp/app-deploy.zip;type=application/zip"
 ```
 
-Poll the revision list (`GET /api/partner/partner_products/$PRODUCT_ID/app/revisions`) until the new revision flips to `pushed`, then poll `$APP_URL/` for a 200.
+Poll the revision list (`GET /api/partner/products/$PRODUCT_ID/app/revisions`) until the new revision flips to `pushed`, then poll `$APP_URL/` for a 200.
 
 To change config (env vars, build/start command) on an existing service:
 ```bash
-curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/services/$SERVICE_ID" \
+curl -s -X PATCH "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app/services/$SERVICE_ID" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"service": {"env_vars": {"FEATURE_FLAG_X": "false"}}}'
@@ -497,7 +497,7 @@ Each revision retains the zip the partner uploaded, so partners can pull it back
 
 ```bash
 # 1. Ask the API for a short-lived download URL (valid 30 minutes).
-DL=$(curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app/revisions/$REV_ID/download_url" \
+DL=$(curl -s "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app/revisions/$REV_ID/download_url" \
   -H "Authorization: Bearer $API_KEY" | jq -r .url)
 
 # 2. Pull the archive.
@@ -514,17 +514,17 @@ Response shape: `{ "url": "https://...", "expires_at": "<iso8601>" }`. Request a
 - **(Hosted) Revision stays at `status: pushed` but `$APP_URL` never serves the new code** — The platform's build is in progress (typically 2-3 min). If it stays stuck past 10 min, contact Hint support with the revision's `commit_sha`.
 - **(Self-hosted) `$APP_URL` returns the wrong content / 404 on /hint/handshake** — The partner's app isn't actually serving the marketplace routes at the URL they gave. Have them double-check their deployment, then re-run the smoke-test curls from Self-Hosted Step 4.
 - **"Product type must be app"** — The partner's product type must be `app`. Update it in the Partner Portal.
-- **403 on Partner API write endpoints** — Sandbox keys (`sbx-` prefix) can fully manage the marketplace plumbing (revisions, services, anchors, app + partner settings) but **cannot create or modify business records** (e.g. `POST /api/partner/charges`, `POST /api/partner/practice_charges`). Those endpoints require a production-approved partner — contact [devsupport@hint.com](mailto:devsupport@hint.com) for promotion. If a sandbox key is hitting 403 on a non-business endpoint, the API key may not have the right permissions; double-check it's the partner's own key, not an integration key.
+- **403 on Partner API write endpoints** — Sandbox keys (`sbx-` prefix) can fully manage the marketplace plumbing (revisions, services, surfaces, app + partner settings) but **cannot create or modify business records** (e.g. `POST /api/partner/charges`, `POST /api/partner/practice_charges`). Those endpoints require a production-approved partner — contact [devsupport@hint.com](mailto:devsupport@hint.com) for promotion. If a sandbox key is hitting 403 on a non-business endpoint, the API key may not have the right permissions; double-check it's the partner's own key, not an integration key.
 - **428 "This action requires a Practice" on `/api/provider/*`** — You called a Provider endpoint with the partner-wide `HINT_API_KEY` instead of a practice-scoped access token. Provider endpoints can only be called on behalf of a specific practice — use the access_token from `POST /api/oauth/tokens` (the value persisted during `/hint/connect/:code`). See [`_common/provider-api.md`](../_common/provider-api.md).
-- **Handshake fails with 401** — Most common cause: `HINT_WEBHOOK_SECRET` on the deployed service doesn't match the backend's current **Webhooks Signature Key** in the Partner Portal (visible under Webhook Settings). If the partner ever rotated that key, the env var on the service is now stale — re-push env vars via `PATCH /api/partner/partner_products/$PRODUCT_ID/app/services/:id` to pick up the current value. The template's verifier logs the last 4 chars of the env var on mismatch — compare against the portal's current key.
+- **Handshake fails with 401** — Most common cause: `HINT_WEBHOOK_SECRET` on the deployed service doesn't match the backend's current **Webhooks Signature Key** in the Partner Portal (visible under Webhook Settings). If the partner ever rotated that key, the env var on the service is now stale — re-push env vars via `PATCH /api/partner/products/$PRODUCT_ID/app/services/:id` to pick up the current value. The template's verifier logs the last 4 chars of the env var on mismatch — compare against the portal's current key.
 - **Headless connect fails** — The API URL env var may not point to the correct Hint API instance.
-- **Embedded page doesn't load** — Verify the anchor exists and the `source_url` matches `$APP_URL` + the correct route for the surface type.
+- **Embedded page doesn't load** — Verify the surface exists and the `source_url` matches `$APP_URL` + the correct route for the surface type.
 
 ### Viewing logs
 
 Runtime `stdout`/`stderr` from `node server.js` is now visible to partners. Use whichever surface fits the task:
 
-- **Partner API** (programmatic): `GET /api/partner/partner_products/$PRODUCT_ID/app/services/:id/logs` returns the last hour of entries by default. Each entry has `timestamp`, `message`, `type` (`app` / `request` / `build`), `level` (`info` / `warning` / `error`), and — for `type=request` — `path`, `method`, `status_code`. Pass-through query params (`type`, `level`, `text`, `limit`, `direction`, `start_time`, `end_time`) filter and paginate.
+- **Partner API** (programmatic): `GET /api/partner/products/$PRODUCT_ID/app/services/:id/logs` returns the last hour of entries by default. Each entry has `timestamp`, `message`, `type` (`app` / `request` / `build`), `level` (`info` / `warning` / `error`), and — for `type=request` — `path`, `method`, `status_code`. Pass-through query params (`type`, `level`, `text`, `limit`, `direction`, `start_time`, `end_time`) filter and paginate.
 - **Partner Portal** (visual): under each service row on `/partner/products/$PRODUCT_ID/custom_app`, click **View logs** for a Render-style console with color-coded status badges, day separators, and a **Tail** toggle for live streaming (polls every 2 s and appends new entries).
 - **Live tail in scripts**: poll `GET …/logs?direction=forward&start_time=<lastSeenTimestamp>` every couple seconds; dedupe by `timestamp`.
 
@@ -548,6 +548,6 @@ if (process.env.HINT_DEBUG === 'true' && req.method === 'GET' && url.pathname ==
 }
 ```
 
-Push the service with `HINT_DEBUG=true` via `PATCH /api/partner/partner_products/$PRODUCT_ID/app/services/:id`, hit `$APP_URL/debug/env` to inspect the actual env, then set `HINT_DEBUG=false` (or remove the var) before declaring the app production-ready. Never expose secret values themselves — only existence/prefix/last-4 for diagnostics.
+Push the service with `HINT_DEBUG=true` via `PATCH /api/partner/products/$PRODUCT_ID/app/services/:id`, hit `$APP_URL/debug/env` to inspect the actual env, then set `HINT_DEBUG=false` (or remove the var) before declaring the app production-ready. Never expose secret values themselves — only existence/prefix/last-4 for diagnostics.
 
 For business-logic debugging (handshake verification mismatches, connect failures, etc.), the template's handshake verifier and connect handler already log structured diagnostics to `stdout` — those show up directly in the logs view above, so a failing handshake is now traceable end-to-end from the portal.
