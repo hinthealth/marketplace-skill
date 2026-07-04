@@ -43,10 +43,10 @@ curl -s "$HINT_API_URL/api/partner/partner" \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-Then look up the partner's product — every app endpoint is scoped to a `partner_product`:
+Then look up the partner's product — every app endpoint is scoped to a `product`:
 
 ```bash
-curl -s "$HINT_API_URL/api/partner/partner_products" \
+curl -s "$HINT_API_URL/api/partner/products" \
   -H "Authorization: Bearer $API_KEY"
 ```
 

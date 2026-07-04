@@ -68,16 +68,16 @@ From the response, extract whichever of these are present (fresh sandbox partner
 - `name` — partner name (often empty on a brand-new sandbox; the partner can set it later via `PATCH /partner/partner`)
 - `slug` — URL-safe identifier; may be absent on fresh sandboxes
 
-Then look up the partner's product — every app endpoint is scoped to a `partner_product`, so you need its id before doing anything else:
+Then look up the partner's product — every app endpoint is scoped to a `product`, so you need its id before doing anything else:
 
 ```bash
-curl -s "$HINT_API_URL/api/partner/partner_products" \
+curl -s "$HINT_API_URL/api/partner/products" \
   -H "Authorization: Bearer $API_KEY"
 ```
 
 Returns a bare JSON array. Most partners have exactly one product; pick the first entry and save its `id` (looks like `ppro-XXXXXXXXXX`) as `$PRODUCT_ID`. If the partner has multiple products, match by `name` against the app the user is building. The Partner Portal URL bar (`/partner/products/ppro-XXXXXXXXXX/activation_settings`) also exposes the ident as a fallback.
 
-**If the partner has no product yet — or is deliberately adding another** — create one with `POST /api/partner/partner_products` (a second product only succeeds if the partner has `allow_multiple_products` set; otherwise the create returns "Partner already has a product", which means they aren't approved for multiple products — point them at [devsupport@hint.com](mailto:devsupport@hint.com)). Every product attaches to exactly one of the partner's backends, and the create payload decides which:
+**If the partner has no product yet — or is deliberately adding another** — create one with `POST /api/partner/products` (a second product only succeeds if the partner has `allow_multiple_products` set; otherwise the create returns "Partner already has a product", which means they aren't approved for multiple products — point them at [devsupport@hint.com](mailto:devsupport@hint.com)). Every product attaches to exactly one of the partner's backends, and the create payload decides which:
 
 - **One backend (the common case):** omit both `partner_backend` and `create_new_backend`. The API attaches the partner's default backend.
 - **The partner has more than one backend:** the API won't guess — omitting both is rejected with a 422. List the backends first (`GET /api/partner/backends`), then pass either `partner_backend: "pbnd-XXXXXXXXXX"` to reuse a specific existing one, or `create_new_backend: true` to mint a fresh backend for this product. Confirm the choice with the user; for an additional product that should stay isolated, default to `create_new_backend: true` and reuse only when the user says it shares an existing backend.
@@ -85,10 +85,10 @@ Returns a bare JSON array. Most partners have exactly one product; pick the firs
 
 ```bash
 # First product, single backend — let the API attach the default:
-curl -s -X POST "$HINT_API_URL/api/partner/partner_products" \
+curl -s -X POST "$HINT_API_URL/api/partner/products" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"partner_product": {"name": "My App", "slug": "my-app", "type": "app"}}'
+  -d '{"product": {"name": "My App", "slug": "my-app", "type": "app"}}'
 
 # Additional product that needs its own backend — add "create_new_backend": true
 # (or "partner_backend": "pbnd-..." to reuse a specific existing backend).
@@ -285,7 +285,7 @@ Once `$APP_URL` is known (Hint-provisioned in Hosted Mode, partner-supplied in S
 # save that as $BACKEND_ID. If you don't have the product row handy, fetch it again:
 
 ```bash
-curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID" \
+curl -s "$HINT_API_URL/api/partner/products/$PRODUCT_ID" \
   -H "Authorization: Bearer $API_KEY"
 # -> save the response's "partner_backend": { "id": "pbnd-..." } as $BACKEND_ID
 ```
@@ -309,10 +309,10 @@ curl -s -X PATCH "$HINT_API_URL/api/partner/backends/$BACKEND_ID" \
 # defaults to null which means "stay on the marketplace page after activation".
 #
 # ---- Only if the app has a core_page surface ----
-curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID" \
+curl -s -X PATCH "$HINT_API_URL/api/partner/products/$PRODUCT_ID" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"partner_product\": {\"post_activation_action\": \"redirect_to_core_page_anchor\"}}"
+  -d "{\"product\": {\"post_activation_action\": \"redirect_to_core_page_anchor\"}}"
 
 # Set handshake URL
 curl -s -X PATCH "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app" \
@@ -389,7 +389,7 @@ curl -s -X POST "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app/surfaces" \
 
 An app can have one surface of each type at most (`core_page`, `clinical_interaction`, `clinical_chart`, `settings`) — pick the ones the app actually needs. Most apps register one, complex ones register two or three.
 
-> **`core_page` sidebar icon — DO NOT reuse the listing icon.** The listing icon (`partner_product.icon`, set in Step 6.5) is a filled brand mark for the marketplace tile. The sidebar icon is an outlined Material-Symbols-style glyph that lives next to Patients / Employers / Reports / Admin in the practice's left nav and adapts to Hint's hover / selected states. Two distinct assets — reusing the listing icon produces a saturated brand-color block that fights every other nav item. Always PATCH a Material Symbols Outlined glyph at weight 400 (fetched from `raw.githubusercontent.com/google/material-design-icons`) with `height` / `width` / `fill` attributes stripped — see the curl above for the one-liner. Full picker + cleanup rule + verification steps in [`_common/sidebar-icons.md`](../_common/sidebar-icons.md). The full asset guideline is documented at <https://developers.hint.com/docs/partner-asset-guidelines> (bullet 1 = listing, bullet 3 = sidebar). The `core_page_icon_label` shows as a tooltip on desktop and visible text on mobile sidebars — keep it ≤14 chars.
+> **`core_page` sidebar icon — DO NOT reuse the listing icon.** The listing icon (`product.icon`, set in Step 6.5) is a filled brand mark for the marketplace tile. The sidebar icon is an outlined Material-Symbols-style glyph that lives next to Patients / Employers / Reports / Admin in the practice's left nav and adapts to Hint's hover / selected states. Two distinct assets — reusing the listing icon produces a saturated brand-color block that fights every other nav item. Always PATCH a Material Symbols Outlined glyph at weight 400 (fetched from `raw.githubusercontent.com/google/material-design-icons`) with `height` / `width` / `fill` attributes stripped — see the curl above for the one-liner. Full picker + cleanup rule + verification steps in [`_common/sidebar-icons.md`](../_common/sidebar-icons.md). The full asset guideline is documented at <https://developers.hint.com/docs/partner-asset-guidelines> (bullet 1 = listing, bullet 3 = sidebar). The `core_page_icon_label` shows as a tooltip on desktop and visible text on mobile sidebars — keep it ≤14 chars.
 
 ## Step 6.5: Configure the Marketplace Listing
 
@@ -398,11 +398,11 @@ The previous steps set up the **technical contract** (how the app embeds + authe
 Reuse `$PRODUCT_ID` from Step 1.
 
 ```bash
-curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID" \
+curl -s -X PATCH "$HINT_API_URL/api/partner/products/$PRODUCT_ID" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d "{
-    \"partner_product\": {
+    \"product\": {
       \"name\": \"<the app name the user gave in question 1>\",
       \"summary\": \"<a 1-line tagline ≤9 words / ≤60 chars; marketplace cards truncate longer values>\",
       \"built_by_name\": \"<partner display name, e.g. the partner's company name>\",
@@ -412,13 +412,13 @@ curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID" \
   }"
 ```
 
-These 5 fields cover the listing card. **Overview, Highlights, Testimonials, Categories, Links, and Preconditions are also partner-settable** via their own per-section endpoints — use the [`fill-listing`](https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/fill-listing/SKILL.md) skill for the guided workflow, or hit them directly at `/api/partner/products/$PRODUCT_ID/{overview|highlights|testimonials|links|preconditions}` (and `/api/partner/partner_products/$PRODUCT_ID/categories`). Pricing and install Requirements are NOT partner-settable — those are hinter-curated decisions; email [devsupport@hint.com](mailto:devsupport@hint.com) to change them.
+These 5 fields cover the listing card. **Overview, Highlights, Testimonials, Categories, Links, and Preconditions are also partner-settable** via their own per-section endpoints — use the [`fill-listing`](https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/fill-listing/SKILL.md) skill for the guided workflow, or hit them directly at `/api/partner/products/$PRODUCT_ID/{overview|highlights|testimonials|links|preconditions}` (and `/api/partner/products/$PRODUCT_ID/categories`). Pricing and install Requirements are NOT partner-settable — those are hinter-curated decisions; email [devsupport@hint.com](mailto:devsupport@hint.com) to change them.
 
 The `slug` and `type` fields are set when the product is first created and **are not editable via API** afterwards — if the user wants to rename the URL slug or change product type after creation, they have to email [devsupport@hint.com](mailto:devsupport@hint.com).
 
 ### Product status lifecycle
 
-`partner_product.status` is read-only for partners (admin-curated). Values, in rough lifecycle order:
+`product.status` is read-only for partners (admin-curated). Values, in rough lifecycle order:
 
 | Status | Meaning |
 |---|---|

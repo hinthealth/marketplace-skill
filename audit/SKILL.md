@@ -42,10 +42,10 @@ If this returns anything other than 200, stop and report the auth issue.
 
 ## Step 2: Inventory the App's Hint-Side State
 
-First look up the partner's product — every app endpoint is scoped to a `partner_product`:
+First look up the partner's product — every app endpoint is scoped to a `product`:
 
 ```bash
-curl -s "$HINT_API_URL/api/partner/partner_products" -H "Authorization: Bearer $API_KEY"
+curl -s "$HINT_API_URL/api/partner/products" -H "Authorization: Bearer $API_KEY"
 ```
 
 Pick the first entry (or match by name if there are multiple) and save its `id` as `$PRODUCT_ID`. Then:

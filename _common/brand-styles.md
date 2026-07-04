@@ -2,7 +2,7 @@
 
 Tokens for embedded surfaces so the partner's app feels native inside the Hint portal. The Node.js reference renderers in [`node-template.md`](./node-template.md) already use these — port the same values to other stacks.
 
-> **Two distinct icon assets — don't conflate.** The marketplace listing icon (`partner_product.icon` / `icon_url`) is a filled brand mark for the listing tile. The Core Page sidebar icon (`surface.core_page_icon` / `core_page_icon_url`) is an outlined Material-Symbols-style glyph for the practice's left nav. Different aesthetic, different field, different consumer. Reusing the listing icon for the sidebar leaves a saturated brand block fighting Hint's nav. Sidebar specifics live in [`sidebar-icons.md`](./sidebar-icons.md); the official guideline is at <https://developers.hint.com/docs/partner-asset-guidelines>.
+> **Two distinct icon assets — don't conflate.** The marketplace listing icon (`product.icon` / `icon_url`) is a filled brand mark for the listing tile. The Core Page sidebar icon (`surface.core_page_icon` / `core_page_icon_url`) is an outlined Material-Symbols-style glyph for the practice's left nav. Different aesthetic, different field, different consumer. Reusing the listing icon for the sidebar leaves a saturated brand block fighting Hint's nav. Sidebar specifics live in [`sidebar-icons.md`](./sidebar-icons.md); the official guideline is at <https://developers.hint.com/docs/partner-asset-guidelines>.
 
 ## Font
 
