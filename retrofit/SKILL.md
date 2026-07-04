@@ -231,14 +231,14 @@ Ask the partner to deploy the updated code wherever they normally deploy (Vercel
 This step is identical to `create-app`'s Step 6 — set the backend config + handshake URL + anchors. `auth_type` and `redirect_url` live on the partner's backend, so fetch the backend id first (most partners have one default backend):
 
 ```bash
-curl -s "$HINT_API_URL/api/partner/partner_backends" \
+curl -s "$HINT_API_URL/api/partner/backends" \
   -H "Authorization: Bearer $API_KEY"
 # -> bare JSON array; take the first entry's "id" (pbnd-...) as $BACKEND_ID
 
-curl -s -X PATCH "$HINT_API_URL/api/partner/partner_backends/$BACKEND_ID" \
+curl -s -X PATCH "$HINT_API_URL/api/partner/backends/$BACKEND_ID" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"partner_backend\": {\"auth_type\": \"automatic_headless\", \"redirect_url\": \"$APP_URL/hint/connect/\"}}"
+  -d "{\"backend\": {\"auth_type\": \"automatic_headless\", \"redirect_url\": \"$APP_URL/hint/connect/\"}}"
 
 curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app" \
   -H "Authorization: Bearer $API_KEY" \

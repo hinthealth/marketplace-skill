@@ -92,7 +92,7 @@ There is **no per-endpoint event filter today** — a registered endpoint receiv
 **Discover which event types fire:**
 
 ```bash
-curl "$HINT_API_URL/api/partner/integration_events" \
+curl "$HINT_API_URL/api/partner/webhook_events" \
   -H "Authorization: Bearer $HINT_API_KEY"
 ```
 

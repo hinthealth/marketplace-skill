@@ -80,7 +80,7 @@ Returns a bare JSON array. Most partners have exactly one product; pick the firs
 **If the partner has no product yet — or is deliberately adding another** — create one with `POST /api/partner/partner_products` (a second product only succeeds if the partner has `allow_multiple_products` set; otherwise the create returns "Partner already has a product", which means they aren't approved for multiple products — point them at [devsupport@hint.com](mailto:devsupport@hint.com)). Every product attaches to exactly one of the partner's backends, and the create payload decides which:
 
 - **One backend (the common case):** omit both `partner_backend` and `create_new_backend`. The API attaches the partner's default backend.
-- **The partner has more than one backend:** the API won't guess — omitting both is rejected with a 422. List the backends first (`GET /api/partner/partner_backends`), then pass either `partner_backend: "pbnd-XXXXXXXXXX"` to reuse a specific existing one, or `create_new_backend: true` to mint a fresh backend for this product. Confirm the choice with the user; for an additional product that should stay isolated, default to `create_new_backend: true` and reuse only when the user says it shares an existing backend.
+- **The partner has more than one backend:** the API won't guess — omitting both is rejected with a 422. List the backends first (`GET /api/partner/backends`), then pass either `partner_backend: "pbnd-XXXXXXXXXX"` to reuse a specific existing one, or `create_new_backend: true` to mint a fresh backend for this product. Confirm the choice with the user; for an additional product that should stay isolated, default to `create_new_backend: true` and reuse only when the user says it shares an existing backend.
 - **Never send both** `partner_backend` and `create_new_backend` — that's a 422.
 
 ```bash
@@ -296,10 +296,10 @@ curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID" \
 # In managed-hosted mode this PATCH is purely cosmetic for the Activation
 # Settings UI (install fires through a different code path); set it anyway
 # so the tab doesn't read "Not Recommended" right after install.
-curl -s -X PATCH "$HINT_API_URL/api/partner/partner_backends/$BACKEND_ID" \
+curl -s -X PATCH "$HINT_API_URL/api/partner/backends/$BACKEND_ID" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"partner_backend\": {
+  -d "{\"backend\": {
         \"auth_type\": \"automatic_headless\",
         \"redirect_url\": \"$APP_URL/hint/connect/\"
       }}"
@@ -412,7 +412,7 @@ curl -s -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID" \
   }"
 ```
 
-These 5 fields cover the listing card. **Overview, Highlights, Quotes, Categories, Links, and Preconditions are also partner-settable** via their own per-section endpoints — use the [`fill-listing`](https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/fill-listing/SKILL.md) skill for the guided workflow, or hit `/api/partner/partner_products/$PRODUCT_ID/{overview|highlights|quotes|categories|links|preconditions}` directly. Pricing and install Requirements are NOT partner-settable — those are hinter-curated decisions; email [devsupport@hint.com](mailto:devsupport@hint.com) to change them.
+These 5 fields cover the listing card. **Overview, Highlights, Testimonials, Categories, Links, and Preconditions are also partner-settable** via their own per-section endpoints — use the [`fill-listing`](https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/fill-listing/SKILL.md) skill for the guided workflow, or hit them directly at `/api/partner/products/$PRODUCT_ID/{overview|highlights|testimonials|links|preconditions}` (and `/api/partner/partner_products/$PRODUCT_ID/categories`). Pricing and install Requirements are NOT partner-settable — those are hinter-curated decisions; email [devsupport@hint.com](mailto:devsupport@hint.com) to change them.
 
 The `slug` and `type` fields are set when the product is first created and **are not editable via API** afterwards — if the user wants to rename the URL slug or change product type after creation, they have to email [devsupport@hint.com](mailto:devsupport@hint.com).
 

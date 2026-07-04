@@ -56,7 +56,7 @@ curl -s "$HINT_API_URL/api/partner/partner" -H "Authorization: Bearer $API_KEY"
 
 # Backend config (auth_type, redirect_url, localhost_redirect_url, localhost_webhook_url) — most
 # partners have a single default backend; take the first entry of the array
-curl -s "$HINT_API_URL/api/partner/partner_backends" -H "Authorization: Bearer $API_KEY"
+curl -s "$HINT_API_URL/api/partner/backends" -H "Authorization: Bearer $API_KEY"
 
 # App-level config (handshake URL + role mappings)
 curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/app" -H "Authorization: Bearer $API_KEY"
@@ -89,7 +89,7 @@ Required fields:
 
 - `partner.name` — non-empty
 - `partner.email` — non-empty, looks like an email
-- `backend.redirect_url` — non-empty, starts with `https://`, ends with a trailing slash or `/hint/connect/` (from the `partner_backends` response; localhost development URLs live in the separate `localhost_redirect_url` field on the backend, never here)
+- `backend.redirect_url` — non-empty, starts with `https://`, ends with a trailing slash or `/hint/connect/` (from the `backends` response; localhost development URLs live in the separate `localhost_redirect_url` field on the backend, never here)
 - `backend.auth_type` — `automatic_headless` for production-ready apps
 - `app.handshake_url` — non-empty, starts with `https://`, points at the same origin as `$APP_URL`
 - `anchors` — at least one anchor registered, each with a non-empty `source_url` starting with `https://`
@@ -143,7 +143,7 @@ SKIP: if the partner didn't provide the webhook secret.
 
 ### 3.6 HTTPS-only
 
-Walk `backend.redirect_url` (from `partner_backends`), `app.handshake_url`, every `anchor.source_url`. Each must start with `https://` — the prod URL columns reject plain http. Localhost development URLs live in the separate `localhost_*` siblings (`localhost_redirect_url` and `localhost_webhook_url` on the backend, `localhost_handshake_url` on the app, `localhost_source_url` on each anchor), which are http-only and sandbox-partners-only; the per-session `localhost_mode` flag is computed by Hint, not set on the app. Do not move a localhost URL into a prod column.
+Walk `backend.redirect_url` (from `backends`), `app.handshake_url`, every `anchor.source_url`. Each must start with `https://` — the prod URL columns reject plain http. Localhost development URLs live in the separate `localhost_*` siblings (`localhost_redirect_url` and `localhost_webhook_url` on the backend, `localhost_handshake_url` on the app, `localhost_source_url` on each anchor), which are http-only and sandbox-partners-only; the per-session `localhost_mode` flag is computed by Hint, not set on the app. Do not move a localhost URL into a prod column.
 
 PASS: every prod URL is https. FAIL: any plain http URL in a prod column.
 
