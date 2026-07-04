@@ -8,7 +8,7 @@ Two distinct assets, easy to conflate:
 
 | Field | Where it shows | Visual style |
 |---|---|---|
-| `partner_product.icon` / `icon_url` | The marketplace listing tile (`/apps/<slug>` and the browse grid) | **Filled brand mark** — square card, your brand color, your glyph, your typography. A logo. |
+| `product.icon` / `icon_url` | The marketplace listing tile (`/apps/<slug>` and the browse grid) | **Filled brand mark** — square card, your brand color, your glyph, your typography. A logo. |
 | `app.surfaces[core_page].core_page_icon` / `core_page_icon_url` | The practice's left nav sidebar | **Outlined Material Symbols glyph** — single-color (Hint tints it for hover / selected states), no background, no fill, matches Hint's nav style |
 
 If you reuse the listing icon for the sidebar, the result is a saturated brand-color block that fights every other nav item visually. The full guideline is at <https://developers.hint.com/docs/partner-asset-guidelines> — bullet 1 (listing) vs bullet 3 (sidebar).

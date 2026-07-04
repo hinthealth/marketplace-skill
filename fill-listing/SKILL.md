@@ -8,11 +8,11 @@ The skill is structured by **listing section**. Each section maps to its own pub
 
 | Section | Endpoint | Notes |
 |---|---|---|
-| **Identity** — `name`, `slug`, `type`, `summary`, `built_by_name`, `built_by_url`, `icon` | `PATCH /partner/partner_products/:id` | `slug` + `type` are create-only on the public API — Hint support changes them later. |
+| **Identity** — `name`, `slug`, `type`, `summary`, `built_by_name`, `built_by_url`, `icon` | `PATCH /partner/products/:id` | `slug` + `type` are create-only on the public API — Hint support changes them later. |
 | **Overview** — long description + overview images | `GET/PATCH /partner/products/:id/overview` | Returns an empty in-memory overview if none exists; PATCH wraps id-keyed image reconciliation (edit-by-id, create-new, delete-omitted). |
 | **Highlights** — 3–5 feature cards (`title`, `description`, `image`, `position`) | `POST/PATCH/DELETE /partner/products/:id/highlights[/:hid]` | `position` is integer; defaults to next slot via `acts_as_list`. |
 | **Testimonials** — customer testimonials (`text`, `author`, `author_title`, `author_image`, `position`) | `POST/PATCH/DELETE /partner/products/:id/testimonials[/:tid]` | Field names are `text` (NOT `body`) and `author` (NOT `author_name`). The create/update body is wrapped in a `testimonial` key. |
-| **Categories** — 1–3 from Hint's catalog (`name`) | `POST /partner/partner_products/:id/categories` + `PATCH /partner/partner_products/:id/categories/:cid` + `DELETE /partner/partner_products/:id/categories/:cid` + `GET /partner/product_categories` (flat catalog) | POST creates the category-by-name if new and attaches; PATCH attaches an existing category by id. |
+| **Categories** — 1–3 from Hint's catalog (`name` or `category_id`) | `POST /partner/products/:id/categories` + `DELETE /partner/products/:id/categories/:cid` + `GET /partner/products/categories` (flat catalog) | POST attaches by `{name}` (creates the category if new) or by `{category_id}` (an existing catalog id). |
 | **Links** — supporting URLs (`link_type`, `value`, `title`, `utm_campaign`, `utm_content`, `position`) | `POST/PATCH/DELETE /partner/products/:id/links[/:lid]` | `link_type` enum is `url \| phone \| email` (NOT free-text labels). `product_cta` is reserved and managed via the product Identity endpoint — not partner-settable here. |
 | **Preconditions** — pre-install steps (`type`, `url`) | `POST/PATCH/DELETE /partner/products/:id/preconditions[/:pid]` | `type` enum is `external_account \| external_install \| onboarding_call`. |
 
@@ -45,7 +45,7 @@ Ask the partner:
 1. **API key** — sandbox (`sbx-...`) or live.
 2. **Which product?** Partners can own multiple products. List them first and confirm:
    ```bash
-   curl -s "$HINT_API_URL/api/partner/partner_products" -H "Authorization: Bearer $API_KEY"
+   curl -s "$HINT_API_URL/api/partner/products" -H "Authorization: Bearer $API_KEY"
    ```
    Returns a JSON array; each element has `id` (a public id like `pp-xxxx`), `name`, `type`. Filter to `type == "app"` — listing fields below apply to app-type products. Save the product's `id` as `$PRODUCT_ID`.
 3. **Which sections do you want to fill?** Show the table above. Default to "all sections that are unset". The partner can opt-in/out per section.
@@ -55,11 +55,11 @@ Ask the partner:
 Read current state for the chosen product:
 
 ```bash
-curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID" -H "Authorization: Bearer $API_KEY"
+curl -s "$HINT_API_URL/api/partner/products/$PRODUCT_ID" -H "Authorization: Bearer $API_KEY"
 curl -s "$HINT_API_URL/api/partner/products/$PRODUCT_ID/overview" -H "Authorization: Bearer $API_KEY"
 curl -s "$HINT_API_URL/api/partner/products/$PRODUCT_ID/highlights" -H "Authorization: Bearer $API_KEY"
 curl -s "$HINT_API_URL/api/partner/products/$PRODUCT_ID/testimonials" -H "Authorization: Bearer $API_KEY"
-curl -s "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/categories" -H "Authorization: Bearer $API_KEY"
+curl -s "$HINT_API_URL/api/partner/products/$PRODUCT_ID/categories" -H "Authorization: Bearer $API_KEY"
 curl -s "$HINT_API_URL/api/partner/products/$PRODUCT_ID/links" -H "Authorization: Bearer $API_KEY"
 curl -s "$HINT_API_URL/api/partner/products/$PRODUCT_ID/preconditions" -H "Authorization: Bearer $API_KEY"
 ```
@@ -70,7 +70,7 @@ For each section the partner opted into, gather inputs in this order: existing s
 
 ### 2.1 Identity (`name`, `summary`, `built_by_*`, `icon`)
 
-- **Existing**: `name`, `summary`, `built_by_name`, `built_by_url`, `icon_url` from `GET /partner/partner_products/:id`.
+- **Existing**: `name`, `summary`, `built_by_name`, `built_by_url`, `icon_url` from `GET /partner/products/:id`.
 - **Scrape**: page `<title>` → candidate `name`. First `<h1>` or hero copy → candidate `summary` (strip the company/product name; the marketplace card already shows it separately). Page `<img class*="logo">` or `/logo.*` → candidate `icon`. Page domain → candidate `built_by_url`.
 - **Q&A**: ask the partner directly for whatever the scrape didn't fill. **Cap `summary` at ≤9 words / ≤60 chars** — marketplace cards render summary in a single line under the app name, and anything longer truncates with an ellipsis on the listing page. A 9-word cap forces the partner to pick the one thing the app does best ("Panel-wide lab health monitoring"), not a paragraph ("A dashboard for managing patient lab results, member trends, and overdue follow-ups"). Apply the cap **both at draft time** (when generating from the marketing-site scrape) and **before the PATCH** — if the draft runs long, ask the partner to pick a tighter phrasing rather than truncating silently. Confirm icon format is PNG / JPEG / SVG / GIF, ≤5MB.
 - **Skip `slug` and `type`**: both are create-only on the public API. If they're wrong, the partner emails devsupport@hint.com.
@@ -98,10 +98,10 @@ For each section the partner opted into, gather inputs in this order: existing s
 
 ### 2.5 Categories (1–3 entries)
 
-- **Existing**: `GET /partner/partner_products/:id/categories`.
-- **Catalog**: `GET /partner/product_categories` returns the flat list of all marketplace categories currently in use, ordered by name. Pick from this list to align with existing browse — only invent a new category name if nothing fits.
-- **Attach by name (creates if new)**: `POST /partner/partner_products/:id/categories` with `{ "name": "Communication" }`. If a category with that name already exists, it gets attached; otherwise a new one is created and attached.
-- **Attach an existing category by id**: `PATCH /partner/partner_products/:id/categories/:cid`.
+- **Existing**: `GET /partner/products/:id/categories`.
+- **Catalog**: `GET /partner/products/categories` returns the flat list of all marketplace categories currently in use, ordered by name. Pick from this list to align with existing browse — only invent a new category name if nothing fits.
+- **Attach by name (creates if new)**: `POST /partner/products/:id/categories` with `{ "name": "Communication" }`. If a category with that name already exists, it gets attached; otherwise a new one is created and attached.
+- **Attach an existing category by id**: `POST /partner/products/:id/categories` with `{ "category_id": "<id>" }` (same endpoint; pass `category_id` instead of `name`).
 - **Q&A**: show the catalog, let the partner pick 1–3.
 
 ### 2.6 Links (supporting URLs)
@@ -156,8 +156,8 @@ Ask: **"Apply each section now, or skip / tweak any?"** The partner can apply so
 For each approved section, hit the dedicated endpoint. **Check the response per call** — if one section fails, the others can still apply independently.
 
 ```bash
-# Identity — PATCH /partner/partner_products/:id
-curl -sS -w "\nHTTP %{http_code}\n" -X PATCH "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID" \
+# Identity — PATCH /partner/products/:id
+curl -sS -w "\nHTTP %{http_code}\n" -X PATCH "$HINT_API_URL/api/partner/products/$PRODUCT_ID" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"name": "Acme Health Connect", "summary": "…", "built_by_name": "Acme", "built_by_url": "https://acme.example.com", "icon": "data:image/png;base64,…"}'
@@ -186,7 +186,7 @@ curl -sS -w "\nHTTP %{http_code}\n" -X POST "$HINT_API_URL/api/partner/products/
   -d '{"testimonial": {"text": "…", "author": "Sarah Chen", "author_title": "Office Manager, Mesa Family Practice", "position": 1}}'
 
 # Categories — POST by name (creates+attaches if new), or PATCH by id (attach existing):
-curl -sS -w "\nHTTP %{http_code}\n" -X POST "$HINT_API_URL/api/partner/partner_products/$PRODUCT_ID/categories" \
+curl -sS -w "\nHTTP %{http_code}\n" -X POST "$HINT_API_URL/api/partner/products/$PRODUCT_ID/categories" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"name": "Communication"}'
@@ -260,8 +260,8 @@ For Pricing or Requirements changes, the partner emails [devsupport@hint.com](ma
 
 ## Troubleshooting
 
-- **422 on slug or type during PATCH /partner/partner_products/:id** — both are create-only via the public API. Strong params silently drop them, so the call usually succeeds but the field is unchanged. To rename a product or change its type, email devsupport@hint.com.
-- **404 on a category id** — the partner picked an id that doesn't exist. Re-fetch `GET /partner/product_categories` and pick again. If the desired category isn't in the catalog, POST by name instead — that creates it.
+- **422 on slug or type during PATCH /partner/products/:id** — both are create-only via the public API. Strong params silently drop them, so the call usually succeeds but the field is unchanged. To rename a product or change its type, email devsupport@hint.com.
+- **404 on a category id** — the partner picked an id that doesn't exist. Re-fetch `GET /partner/products/categories` and pick again. If the desired category isn't in the catalog, POST by name instead — that creates it.
 - **422 on `link_type`** — only `url`, `phone`, and `email` are partner-settable. `product_cta` is reserved.
 - **Image upload 422** — file is >5MB or wrong MIME. Resize or re-encode. SVG is fine for icons; prefer JPEG / PNG for photos.
 - **Marketing-site scrape returns 401 / 403** — the site is gated. Fall back to asking the partner directly for the copy.
