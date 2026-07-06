@@ -276,7 +276,7 @@ Once `$APP_URL` is known (Hint-provisioned in Hosted Mode, partner-supplied in S
 
 > **In managed-hosted mode**, the install flow itself does NOT consult `auth_type` or `redirect_url` — the integration is created and activated programmatically by Hint. But the Activation Settings tab in the partner's portal still reads from those fields, and a practice/partner staring at "auth_type: manual (Not Recommended)" right after install will think the skill didn't finish. **Set them anyway** so the UI looks consistent with what actually shipped.
 
-**`post_activation_action` — only set when the app has a `core_page` surface.** After a practice activates a partner app, Hint can navigate the user to the app's embedded core page surface. The product-level `post_activation_action` enum controls this — set it to `"redirect_to_core_page_anchor"` and Hint resolves to the app's core page route (`/apps/<product-slug>`) automatically; leave it unset (`null`) for `clinical_interaction`-only or `settings`-only apps that have no standalone landing surface. Without it set on a full-page app, every install lands the practice owner back on the marketplace listing page they just came from, which is dead weight when the user's intent is "use the app now". Mixed surfaces that include `core_page`: set it.
+**`post_activation_action` — only set when the app has a `core_page` surface.** After a practice activates a partner app, Hint can navigate the user to the app's embedded core page surface. The product-level `post_activation_action` enum controls this — set it to `"redirect_to_core_page_surface"` and Hint resolves to the app's core page route (`/apps/<product-slug>`) automatically; leave it unset (`null`) for `clinical_interaction`-only or `settings`-only apps that have no standalone landing surface. Without it set on a full-page app, every install lands the practice owner back on the marketplace listing page they just came from, which is dead weight when the user's intent is "use the app now". Mixed surfaces that include `core_page`: set it.
 
 # `auth_type` and `redirect_url` live on the partner's **backend** — the connection
 # settings for one of the partner's environments. The product is attached to exactly
@@ -312,7 +312,7 @@ curl -s -X PATCH "$HINT_API_URL/api/partner/backends/$BACKEND_ID" \
 curl -s -X PATCH "$HINT_API_URL/api/partner/products/$PRODUCT_ID" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"product\": {\"post_activation_action\": \"redirect_to_core_page_anchor\"}}"
+  -d "{\"product\": {\"post_activation_action\": \"redirect_to_core_page_surface\"}}"
 
 # Set handshake URL
 curl -s -X PATCH "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app" \
