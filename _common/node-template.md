@@ -511,6 +511,9 @@ function renderCorePage(sessionKey, session) {
 </html>`;
 }
 
+// Clinical surfaces size the iframe ONLY from the app's resized reports.
+// hint-sdk.js (included below) auto-reports height via ResizeObserver;
+// without it the surface is clipped to a ~150px strip in the note window.
 function renderClinicalInteraction(sessionKey, session) {
   return `<!DOCTYPE html>
 <html>

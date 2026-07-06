@@ -10,6 +10,18 @@ Every Hint marketplace app — regardless of stack or hosting — has to impleme
 | `POST /hint/connect/:code` | Receives an OAuth code from Hint after a practice installs the app. The app exchanges the code at `POST $HINT_API_URL/api/oauth/tokens` for a practice-scoped access token and persists `{partner_id, practice_id, access_token}` keyed by practice. |
 | `GET /hint/<surface_type>?session_key=...` | Renders the embedded UI for the surface type. Looks up the session by `session_key`, recovers the practice context, then renders the surface. `<surface_type>` is one of `core_page`, `clinical_interaction`, or `settings`. |
 
+## Device capabilities in the embed (camera / microphone / geolocation)
+
+Embedded surfaces run in a cross-origin iframe, so capabilities like `navigator.mediaDevices.getUserMedia` are blocked by the browser unless Hint delegates them to the app's origin. Delegation is opt-in per app: set `browser_allow_list` (e.g. `["camera", "microphone"]`; supported: `camera`, `microphone`, `geolocation`) via `PATCH /partner/products/:id/app`, and Hint renders the app's embed iframes with a matching Permissions Policy `allow` attribute. The end user still sees the browser's normal permission prompt. Changes apply at embed time — already-open surfaces must be reloaded. Current iOS honors the delegation (camera/microphone/geolocation verified end-to-end in iOS Safari, including `facingMode` switching and `applyConstraints` zoom); older iOS versions may still block getUserMedia in cross-origin iframes, so keep a `<input type="file" accept="image/*" capture>` fallback for those.
+
+Surface sizing: clinical surfaces (`clinical_interaction`, `clinical_chart`) size the embed iframe **only** from the app's `resized` reports — include `hint-sdk.js` (it auto-reports height via a ResizeObserver from load) or the surface is clipped to a ~150px strip. The same applies to `core_page` surfaces with auto-adjust height disabled.
+
+Error-handling guidance: on a `NotAllowedError`, check the handshake's `browser_allow_list` first. Capability not in the list → show "This app hasn't been granted camera access in Hint — enable it under App Settings." Capability in the list → the user denied the browser prompt; point them at the browser's site permissions.
+
+## Localhost mode: CORS must allow BOTH portal origins
+
+In localhost mode the handshake is browser-mediated: the portal hosting the surface calls your local server directly. Which portal that is depends on the surface type — the provider portal for `core_page`/`settings`, the **clinical portal** for `clinical_interaction`/`clinical_chart`. Do not hardcode one origin: echo the request `Origin` header back in `Access-Control-Allow-Origin` when it matches an allowlist containing both portal origins for your environment, send `Vary: Origin`, allow the `Content-Type` and `X-Hint-Signature` headers, and handle the `OPTIONS` preflight.
+
 ## Required env vars
 
 The deployed app reads `HINT_API_URL`, `HINT_API_KEY`, `HINT_PARTNER_ID`, `HINT_WEBHOOK_SECRET`, and (optionally) `DATABASE_URL` from `process.env` (or the equivalent in its language). Hint sets them automatically on Hosted-Mode services; Self-Hosted Mode apps set them themselves at deploy time. Full descriptions: see [`api-conventions.md` § Reserved env vars](./api-conventions.md#reserved-env-vars).
@@ -30,6 +42,7 @@ After signature verification, parse `request.body` as JSON. Top-level field refe
 | `user.partner_roles` | string[] | Roles the partner assigned to this user under their App config. Use these for in-app RBAC; they're separate from Hint's practice-level permissions. |
 | `integration.id` | string | The Hint integration record's id. Persist for support / debugging. |
 | `access_token` | string | **Session-scoped api key minted for THIS embed session.** Use this to call `/api/provider/*` from the app instead of the practice-wide OAuth token where possible — see the section below. |
+| `browser_allow_list` | string[] | Browser capabilities Hint has delegated to this app's iframes (`camera`, `microphone`, `geolocation`; empty = none). Preflight against this before calling `getUserMedia`: if the capability is missing here, the fix is the App Settings toggle in Hint — the browser will throw the same `NotAllowedError` as a user denial, so telling the cases apart requires this field. |
 | `access_context` | string | Either `standard` (normal staff user) or `platform_support` (a Hint admin acting on the practice's behalf, e.g. for support). Apps may want to render a "viewing as Hint support" banner when this is `platform_support`. |
 | `patient.id` | string | Only on `clinical_interaction` and `clinical_chart` surfaces — public id of the patient being viewed. |
 | `interaction.id` | string | Only on `clinical_interaction` surfaces — public id of the open clinical interaction. |
