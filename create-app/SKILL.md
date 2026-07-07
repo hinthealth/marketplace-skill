@@ -79,9 +79,9 @@ Returns a bare JSON array. Most partners have exactly one product; pick the firs
 
 **If the partner has no product yet — or is deliberately adding another** — create one with `POST /api/partner/products` (a second product only succeeds if the partner has `allow_multiple_products` set; otherwise the create returns "Partner already has a product", which means they aren't approved for multiple products — point them at [devsupport@hint.com](mailto:devsupport@hint.com)). Every product attaches to exactly one of the partner's backends, and the create payload decides which:
 
-- **One backend (the common case):** omit both `partner_backend` and `create_new_backend`. The API attaches the partner's default backend.
-- **The partner has more than one backend:** the API won't guess — omitting both is rejected with a 422. List the backends first (`GET /api/partner/backends`), then pass either `partner_backend: "pbnd-XXXXXXXXXX"` to reuse a specific existing one, or `create_new_backend: true` to mint a fresh backend for this product. Confirm the choice with the user; for an additional product that should stay isolated, default to `create_new_backend: true` and reuse only when the user says it shares an existing backend.
-- **Never send both** `partner_backend` and `create_new_backend` — that's a 422.
+- **One backend (the common case):** omit both `backend` and `create_new_backend`. The API attaches the partner's default backend.
+- **The partner has more than one backend:** the API won't guess — omitting both is rejected with a 422. List the backends first (`GET /api/partner/backends`), then pass either `backend: "pbnd-XXXXXXXXXX"` to reuse a specific existing one, or `create_new_backend: true` to mint a fresh backend for this product. Confirm the choice with the user; for an additional product that should stay isolated, default to `create_new_backend: true` and reuse only when the user says it shares an existing backend.
+- **Never send both** `backend` and `create_new_backend` — that's a 422.
 
 ```bash
 # First product, single backend — let the API attach the default:
@@ -91,7 +91,7 @@ curl -s -X POST "$HINT_API_URL/api/partner/products" \
   -d '{"product": {"name": "My App", "slug": "my-app", "type": "app"}}'
 
 # Additional product that needs its own backend — add "create_new_backend": true
-# (or "partner_backend": "pbnd-..." to reuse a specific existing backend).
+# (or "backend": "pbnd-..." to reuse a specific existing backend).
 ```
 
 Save the returned `id` as `$PRODUCT_ID`. The `slug` and `type` are only settable here at creation — they can't be changed via API afterward.
