@@ -122,7 +122,7 @@ The SDK runs inside the iframe Hint embeds, so the host it's served from must ma
 | Member | Type | Notes |
 |---|---|---|
 | `HintSDK.init(callback)` | function | Pass a callback that fires once the SDK has connected to the host. All other members are unsafe to read before `init` resolves. |
-| `HintSDK.user` | object | `{ id, name, email, partner_roles }`. The currently signed-in staff user; `partner_roles` is an array of role-name strings (matching whatever the partner configured under `partner_roles` in their App config). |
+| `HintSDK.user` | object | `{ id, name, email, first_name, last_name, phones }`. The currently signed-in staff user. Note: `partner_roles` and `access_context` are NOT on the SDK user object — they are delivered only in the server-to-server handshake payload (see [`marketplace-contract.md`](./marketplace-contract.md#handshake-payload-shape)). Read them on your server, not in the browser. |
 | `HintSDK.currentPatient` | object \| null | `{ id, name }` if the user is viewing a patient (clinical_interaction / core_page surfaces); `null` otherwise. |
 | `HintSDK.interaction` | object \| null | `{ id }` if the surface is a clinical interaction; `null` otherwise. Most `core_page` and `settings` surfaces will see `null` here. |
 | `HintSDK.onCurrentPatientChanged(callback)` | function | Subscribes to current-patient updates. Callback receives the new patient object (or `null`). Use this when the surface needs to react to the user switching charts without reloading. |
