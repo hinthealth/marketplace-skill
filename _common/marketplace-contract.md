@@ -10,6 +10,18 @@ Every Hint marketplace app — regardless of stack or hosting — has to impleme
 | `POST /hint/connect/:code` | Receives an OAuth code from Hint after a practice installs the app. The app exchanges the code at `POST $HINT_API_URL/api/oauth/tokens` for a practice-scoped access token and persists `{partner_id, practice_id, access_token}` keyed by practice. |
 | `GET /hint/<surface_type>?session_key=...` | Renders the embedded UI for the surface type. Looks up the session by `session_key`, recovers the practice context, then renders the surface. `<surface_type>` is one of `core_page`, `clinical_interaction`, or `settings`. |
 
+## Activation mode: `connect` always fires; `pending` vs `active` is separate
+
+A product's **activation mode** decides *when a connection goes live* — it does **not** gate the connect flow. Whatever the mode, Hint sends the `POST /hint/connect/:code` request for **every** headless install, so your connect handler must always provision/link the practice and store its access token — including for installs that are not active yet. (This is the key thing to get right: a `partner_activate` or `practice_activate` install still calls `connect`, not just `instant` ones.)
+
+| Mode | State after the practice finishes setup | Who activates |
+|---|---|---|
+| `instant` (default) | `active` immediately | nobody — active on install |
+| `practice_activate` | `active` when the practice finishes setup in Hint | the practice |
+| `partner_activate` | `pending` until you activate it | you, via `POST /api/partner/installations/:id/activate` |
+
+Only `active` connections receive webhooks and (if you bill through Hint) start billing. So build the connect handler to be **idempotent and not assume the connection is active yet** — provision on `connect`, and treat "receiving events / billing" as something that only begins once the connection is active. For `partner_activate`, you can exchange the code via `POST /api/partner/installations/connect` with `{ "activate": false }` to fetch the practice key while the install stays `pending`, then activate later. List installs awaiting your action with `GET /api/partner/installations?status=pending`.
+
 ## Device capabilities in the embed (camera / microphone / geolocation)
 
 Embedded surfaces run in a cross-origin iframe, so capabilities like `navigator.mediaDevices.getUserMedia` are blocked by the browser unless Hint delegates them to the app's origin. Delegation is opt-in per app: set `browser_allow_list` (e.g. `["camera", "microphone"]`; supported: `camera`, `microphone`, `geolocation`) via `PATCH /partner/products/:id/app`, and Hint renders the app's embed iframes with a matching Permissions Policy `allow` attribute. The end user still sees the browser's normal permission prompt. Changes apply at embed time — already-open surfaces must be reloaded. Current iOS honors the delegation (camera/microphone/geolocation verified end-to-end in iOS Safari, including `facingMode` switching and `applyConstraints` zoom); older iOS versions may still block getUserMedia in cross-origin iframes, so keep a `<input type="file" accept="image/*" capture>` fallback for those.
