@@ -44,22 +44,38 @@ After signature verification, parse `request.body` as JSON. Top-level field refe
 
 | Path | Type | Notes |
 |---|---|---|
-| `timestamp` | integer | Unix seconds at the moment Hint signed the request. The signature covers the body, including this, so it doubles as a replay-defense nonce — reject requests with a `timestamp` older than a few minutes if you want strict freshness. |
+| `timestamp` | string | ISO-8601 timestamp of the moment Hint signed the request (e.g. `2025-10-30T14:20:19.316986-03:00`). The signature covers the body, including this, so it doubles as a replay-defense nonce — reject requests whose `timestamp` is older than a few minutes if you want strict freshness. |
 | `practice.id` | string | Public id for the practice (e.g. `prc-xxxx`). Use this as the tenancy key for everything the app stores on behalf of this practice. |
 | `practice.name` | string | Display name. Safe to render in UI. |
 | `user.id` | string | Public id of the signed-in staff user. |
 | `user.email` | string | Login email. |
 | `user.name` / `user.first_name` / `user.last_name` | string | Display name parts. |
 | `user.phones` | object[] | Array of phone records (`{ id, ... }`). May be empty. |
-| `user.partner_roles` | string[] | Roles the partner assigned to this user under their App config. Use these for in-app RBAC; they're separate from Hint's practice-level permissions. |
+| `user.partner_roles` | string[] | Roles Hint resolved for this user, drawn from the role list the partner declared in their App config. Use these for in-app RBAC; they're separate from Hint's practice-level permissions. **May be empty** — an empty array means the user has no access; render an access-denied state rather than erroring. |
 | `integration.id` | string | The Hint integration record's id. Persist for support / debugging. |
 | `access_token` | string | **Session-scoped api key minted for THIS embed session.** Use this to call `/api/provider/*` from the app instead of the practice-wide OAuth token where possible — see the section below. |
 | `browser_allow_list` | string[] | Browser capabilities Hint has delegated to this app's iframes (`camera`, `microphone`, `geolocation`; empty = none). Preflight against this before calling `getUserMedia`: if the capability is missing here, the fix is the App Settings toggle in Hint — the browser will throw the same `NotAllowedError` as a user denial, so telling the cases apart requires this field. |
-| `access_context` | string | Either `standard` (normal staff user) or `platform_support` (a Hint admin acting on the practice's behalf, e.g. for support). Apps may want to render a "viewing as Hint support" banner when this is `platform_support`. |
+| `access_context` | string | Either `standard` (normal staff user) or `platform_support` (a Hint employee accessing the app in a platform-operator capacity). See [Handling `platform_support` sessions](#handling-platform_support-sessions) — correct handling is a required capability. |
 | `patient.id` | string | Only on `clinical_interaction` and `clinical_chart` surfaces — public id of the patient being viewed. |
 | `interaction.id` | string | Only on `clinical_interaction` surfaces — public id of the open clinical interaction. |
 
 The payload may carry additional fields over time. Decode permissively (ignore unknowns); only require the fields the app actually reads.
+
+### Handling `platform_support` sessions
+
+`access_context` tells the app what kind of session the handshake represents:
+
+- `standard` — a regular practice staff user, accessing the app with their assigned `partner_roles`. This is the default.
+- `platform_support` — a Hint employee accessing the app in their own capacity as a platform operator, not as a practice user. This happens when a practice reports a support issue to Hint, or when a Hint team member trains a practice on the app. It is **delegation, not impersonation** — the employee is not pretending to be a practice user. The `partner_roles` sent alongside is always the partner's designated admin role, so support has full visibility.
+
+Handling `platform_support` correctly is a **required capability**. When `access_context` is `platform_support`, the app MUST:
+
+- **Not provision a persistent user** in the practice's account from the handshake `user`. These sessions are ephemeral — store session state only (keyed by practice), the same way you'd treat a session from your own support team. Do not create a customer user record.
+- **Scope access to the handshake's practice** with admin-level (or read-only, per the app's policy) visibility. Never expose another practice's data.
+- **Attribute audit-log entries to a platform-support session**, not to a customer user, so vendor-initiated access is distinguishable from customer activity.
+- **Surface a visible indicator** (e.g. a "Hint support session" banner) so it's clear the account is being viewed by Hint.
+
+Decode permissively: `access_context` may gain values over time, so treat any unrecognized value as non-`standard` and default to the most conservative handling. In healthcare, vendor access to a customer's environment carries BAA and compliance implications — this distinction keeps audit trails accurate and access appropriately scoped.
 
 ### Use the handshake's `access_token` to call the Provider API
 

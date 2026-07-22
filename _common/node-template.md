@@ -300,11 +300,18 @@ const server = http.createServer(async (req, res) => {
     }
     // Persist the session keyed by sessionKey AND remember practice_id so
     // every subsequent handler can scope reads/writes to it.
+    //
+    // access_context distinguishes a normal practice user ('standard') from a
+    // Hint platform-support session ('platform_support'). For platform_support,
+    // store session state ONLY — never provision a persistent practice user
+    // from parsed.user; treat it like a session from your own support team,
+    // scoped read/admin access to this practice, audited as a support session.
     const sessionKey = crypto.randomUUID();
     await saveSession(sessionKey, parsed.practice?.id, {
       user: parsed.user,
       practice: parsed.practice,
       integration: parsed.integration,
+      access_context: parsed.access_context, // 'standard' | 'platform_support'
     });
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ session_key: sessionKey }));
