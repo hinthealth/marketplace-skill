@@ -21,7 +21,7 @@ Authorization: Bearer <api_key_or_access_token>
 Two distinct token types:
 
 - **Partner API key** — partner-wide, set via `HINT_API_KEY` env var on the deployed service. Used to call `/api/partner/*`.
-- **Practice access token** — practice-scoped, returned by `POST /api/oauth/tokens` during the `/hint/connect/:code` exchange. Used to call `/api/provider/*` on behalf of a specific practice. Persist this server-side keyed by `practice_id`.
+- **Practice access token** — practice-scoped, returned by `POST /api/partner/installations/connect` (in `api_keys[0].token`) during the `/hint/connect/:code` exchange. Used to call `/api/provider/*` on behalf of a specific practice. Persist this server-side keyed by `practice_id`.
 
 Never use the partner API key for `/api/provider/*` calls — those need the practice-scoped token or they leak cross-practice data.
 

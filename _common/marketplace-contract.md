@@ -7,7 +7,7 @@ Every Hint marketplace app — regardless of stack or hosting — has to impleme
 | Route | What it does |
 |---|---|
 | `POST /hint/handshake` | Receives a signed payload from Hint at install/embed time. The app verifies the `X-Hint-Signature` header (HMAC-SHA256 of the request body, key = the partner's webhook secret), mints a session key, persists `{session_key, user, practice}` server-side, and returns the session key. |
-| `POST /hint/connect/:code` | Receives an OAuth code from Hint after a practice installs the app. The app exchanges the code at `POST $HINT_API_URL/api/oauth/tokens` for a practice-scoped access token and persists `{partner_id, practice_id, access_token}` keyed by practice. |
+| `POST /hint/connect/:code` | Receives an authorization code from Hint after a practice installs the app. The app exchanges the code at `POST $HINT_API_URL/api/partner/installations/connect` for the installation (the practice-scoped credential is in `api_keys[0].token`) and persists `{partner_id, practice_id, access_token}` keyed by practice. The response also carries the installed `product` (`{ id, name, slug }`) — record its `id` if you offer more than one product, so you can tell which one each practice installed. |
 | `GET /hint/<surface_type>?session_key=...` | Renders the embedded UI for the surface type. Looks up the session by `session_key`, recovers the practice context, then renders the surface. `<surface_type>` is one of `core_page`, `clinical_interaction`, or `settings`. |
 
 ## Activation mode: `connect` always fires; `pending` vs `active` is separate
@@ -53,7 +53,10 @@ After signature verification, parse `request.body` as JSON. Top-level field refe
 | `user.phones` | object[] | Array of phone records (`{ id, ... }`). May be empty. |
 | `user.partner_roles` | string[] | Roles Hint resolved for this user, drawn from the role list the partner declared in their App config. Use these for in-app RBAC; they're separate from Hint's practice-level permissions. **May be empty** — an empty array means the user has no access; render an access-denied state rather than erroring. |
 | `integration.id` | string | The Hint integration record's id. Persist for support / debugging. |
-| `access_token` | string | **Session-scoped api key minted for THIS embed session.** Use this to call `/api/provider/*` from the app instead of the practice-wide OAuth token where possible — see the section below. |
+| `installation.id` | string | Public id (e.g. `inst-xxxx`) of the specific installation — the (practice × your product) record. Use it to correlate this embed session to the install you saw at `/hint/connect/:code`; it disambiguates which of your products a session is for when a practice has installed more than one. May be `null` if no installation record resolves. |
+| `product.id` | string | Public id (e.g. `ppro-xxxx`) of the product this session is for — your app's own product. Stable key for scoping stored data by product. Same shape as the `product` in the `/hint/connect/:code` response. |
+| `product.name` / `product.slug` | string | Display name and slug of the product. |
+| `access_token` | string | **Session-scoped api key minted for THIS embed session.** Use this to call `/api/provider/*` from the app instead of the practice-wide access token where possible — see the section below. |
 | `browser_allow_list` | string[] | Browser capabilities Hint has delegated to this app's iframes (`camera`, `microphone`, `geolocation`; empty = none). Preflight against this before calling `getUserMedia`: if the capability is missing here, the fix is the App Settings toggle in Hint — the browser will throw the same `NotAllowedError` as a user denial, so telling the cases apart requires this field. |
 | `access_context` | string | Either `standard` (normal staff user) or `platform_support` (a Hint employee accessing the app in a platform-operator capacity). See [Handling `platform_support` sessions](#handling-platform_support-sessions) — correct handling is a required capability. |
 | `patient.id` | string | Only on `clinical_interaction` and `clinical_chart` surfaces — public id of the patient being viewed. |
@@ -85,13 +88,13 @@ The `access_token` Hint includes in the handshake body is a **session-scoped api
 Authorization: Bearer <handshake.access_token>
 ```
 
-This is preferable to the longer-lived practice OAuth access token (obtained via `POST /hint/connect/:code`) because:
+This is preferable to the longer-lived practice access token (obtained via `POST /hint/connect/:code`) because:
 
 - It's automatic — every handshake mints a fresh one; no separate exchange step.
 - Its lifetime is the embed session, not the practice's lifetime — leaks die quickly.
 - It carries the acting user's identity, so server-side audit logs attribute correctly.
 
-Use the OAuth practice token (the one stored under `practice_id` after `/hint/connect/:code`) only for **server-to-server work that happens outside an embed session** — webhooks, scheduled jobs, async fanout to other practices. For "the embedded surface is open and needs to read /provider/patients", the handshake token is the right tool.
+Use the practice access token (the one stored under `practice_id` after `/hint/connect/:code`) only for **server-to-server work that happens outside an embed session** — webhooks, scheduled jobs, async fanout to other practices. For "the embedded surface is open and needs to read /provider/patients", the handshake token is the right tool.
 
 ## Signature verification
 
@@ -116,7 +119,7 @@ The rule, stated as crisply as possible:
 Where the `practice_id` comes from:
 
 1. `POST /hint/handshake` arrives with a signed payload that includes `practice.id`. The app persists `{ session_key, user, practice_id, ... }` server-side.
-2. `POST /hint/connect/:code` returns `{ access_token, practice_id, ... }`. The app persists `{ practice_id, access_token }` keyed by `practice_id`.
+2. `POST /hint/connect/:code` exchanges the code at `POST /api/partner/installations/connect`, which returns the installation `{ practice: { id }, product: { name, slug }, api_keys: [{ token }], ... }`. The app persists `{ practice_id, access_token: api_keys[0].token }` keyed by `practice_id`.
 3. `GET /hint/<surface_type>?session_key=...` looks up the session by `session_key` to recover the `practice_id`, then scopes every subsequent query to it.
 
 A reference helper every handler should go through (Node.js form; port the shape to whatever stack the app uses):
