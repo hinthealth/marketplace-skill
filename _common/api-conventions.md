@@ -21,7 +21,7 @@ Authorization: Bearer <api_key_or_access_token>
 Two distinct token types:
 
 - **Partner API key** — partner-wide, set via `HINT_API_KEY` env var on the deployed service. Used to call `/api/partner/*`.
-- **Practice access token** — practice-scoped, returned by `POST /api/partner/installations/connect` (in `api_keys[0].token`) during the `/hint/connect/:code` exchange. Used to call `/api/provider/*` on behalf of a specific practice. Persist this server-side keyed by `practice_id`.
+- **Practice access token** — practice-scoped, returned by `POST /api/partner/installations/connect` (in `api_keys[0].token`) during the `/hint/connect/:code` exchange. Used to call `/api/provider/*` on behalf of a specific practice. Persist this server-side keyed by `(HINT_PRODUCT_ID, practice_id)` — a backend's Postgres can be shared across your products, so scope the store by product to avoid collisions.
 
 Never use the partner API key for `/api/provider/*` calls — those need the practice-scoped token or they leak cross-practice data.
 
@@ -71,6 +71,7 @@ Hint sets these automatically on every Hosted-Mode deploy. Self-Hosted Mode apps
 | `HINT_API_URL` | Base URL of the Hint API. Use `https://api.hint.com` for both sandbox and live. |
 | `HINT_API_KEY` | Partner-wide API key for `/api/partner/*` calls. NOT used for `/api/provider/*` (those need the practice-scoped access token from `/hint/connect/:code`). |
 | `HINT_PARTNER_ID` | Stable partner ident (e.g. `ptr-...` / `sbx-ptr-...`). Useful for log scoping. |
+| `HINT_PRODUCT_ID` | Stable ident (e.g. `ppro-...`) of **this app's own product**. A backend's Postgres is shared by every app whose product is on that backend, so scope per-product data (e.g. the practice access-token store) by this value so multiple products a practice installs don't collide. |
 | `HINT_WEBHOOK_SECRET` | Used to verify the `X-Hint-Signature` header on `POST /hint/handshake`. The partner finds this in the Partner Portal under **Webhook Settings → Webhooks Signature Key** (the key belongs to the selected backend; most partners have one). |
 | `DATABASE_URL` | Postgres connection string (only present when the auto-provisioned sibling database is connectable). |
 

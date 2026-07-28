@@ -7,7 +7,7 @@ Every Hint marketplace app — regardless of stack or hosting — has to impleme
 | Route | What it does |
 |---|---|
 | `POST /hint/handshake` | Receives a signed payload from Hint at install/embed time. The app verifies the `X-Hint-Signature` header (HMAC-SHA256 of the request body, key = the partner's webhook secret), mints a session key, persists `{session_key, user, practice}` server-side, and returns the session key. |
-| `POST /hint/connect/:code` | Receives an authorization code from Hint after a practice installs the app. The app exchanges the code at `POST $HINT_API_URL/api/partner/installations/connect` for the installation (the practice-scoped credential is in `api_keys[0].token`) and persists `{partner_id, practice_id, access_token}` keyed by practice. The response also carries the installed `product` (`{ id, name, slug }`) — record its `id` if you offer more than one product, so you can tell which one each practice installed. |
+| `POST /hint/connect/:code` | Receives an authorization code from Hint after a practice installs the app. The app exchanges the code at `POST $HINT_API_URL/api/partner/installations/connect` for the installation (the practice-scoped credential is in `api_keys[0].token`) and persists `{product_id, practice_id, access_token}` keyed by `(HINT_PRODUCT_ID, practice_id)`. The response also carries the installed `product` (`{ id, name, slug }`); scoping the token store by product keeps two products a practice installs (which share the backend's Postgres) from overwriting each other's token. |
 | `GET /hint/<surface_type>?session_key=...` | Renders the embedded UI for the surface type. Looks up the session by `session_key`, recovers the practice context, then renders the surface. `<surface_type>` is one of `core_page`, `clinical_interaction`, or `settings`. |
 
 ## Activation mode: `connect` always fires; `pending` vs `active` is separate
@@ -119,7 +119,7 @@ The rule, stated as crisply as possible:
 Where the `practice_id` comes from:
 
 1. `POST /hint/handshake` arrives with a signed payload that includes `practice.id`. The app persists `{ session_key, user, practice_id, ... }` server-side.
-2. `POST /hint/connect/:code` exchanges the code at `POST /api/partner/installations/connect`, which returns the installation `{ practice: { id }, product: { name, slug }, api_keys: [{ token }], ... }`. The app persists `{ practice_id, access_token: api_keys[0].token }` keyed by `practice_id`.
+2. `POST /hint/connect/:code` exchanges the code at `POST /api/partner/installations/connect`, which returns the installation `{ practice: { id }, product: { id, name, slug }, api_keys: [{ token }], ... }`. The app persists `{ practice_id, access_token: api_keys[0].token }` keyed by `(HINT_PRODUCT_ID, practice_id)`.
 3. `GET /hint/<surface_type>?session_key=...` looks up the session by `session_key` to recover the `practice_id`, then scopes every subsequent query to it.
 
 A reference helper every handler should go through (Node.js form; port the shape to whatever stack the app uses):

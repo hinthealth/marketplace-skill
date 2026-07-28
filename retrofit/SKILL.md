@@ -159,7 +159,7 @@ The handler must:
 
 1. Extract `:code` from the URL path.
 2. POST to `$HINT_API_URL/api/partner/installations/connect` with `{ code }` and `Authorization: Bearer $HINT_API_KEY`. The response is the installation; the practice-scoped credential is `api_keys[0].token` (`practice.id` is the practice).
-3. Persist `{partner_id, practice_id, access_token}` (`access_token` = `api_keys[0].token`) keyed by `practice_id` in whatever session/practice store the app uses (Postgres if `DATABASE_URL` is set, in-memory only for demos).
+3. Persist `{product_id, practice_id, access_token}` (`product_id` = `HINT_PRODUCT_ID`, `access_token` = `api_keys[0].token`) keyed by `(product_id, practice_id)` in whatever session/practice store the app uses (Postgres if `DATABASE_URL` is set, in-memory only for demos). The product scope avoids collisions when a backend's Postgres is shared across your products.
 4. Return `{ status: 'connected' }`.
 
 ### Snippet 3: `GET /hint/<surface_type>?session_key=...`
