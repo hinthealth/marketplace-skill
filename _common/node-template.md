@@ -362,9 +362,9 @@ const server = http.createServer(async (req, res) => {
         });
         const practiceId = resp.body?.practice?.id;
         const accessToken = resp.body?.api_keys?.[0]?.token;
-        // resp.body.product ({ name, slug }) is the product this practice just
-        // installed — record it alongside the token if you offer more than one
-        // product, so you can tell which one a given practice is using.
+        // resp.body.product ({ id, name, slug }) is the product this practice
+        // just installed — record product.id alongside the token if you offer
+        // more than one product, so you can tell which one a practice is using.
         if (practiceId && accessToken) {
           await saveAccessToken(practiceId, accessToken);
         } else {
