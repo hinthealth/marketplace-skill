@@ -11,7 +11,7 @@ The Provider API is what marketplace apps use to read + write practice data on b
 
 ## Authentication
 
-All `/api/provider/*` calls use the **practice-scoped access token** returned by `POST /api/partner/installations/connect` (as `api_keys[0].token`) during the `/hint/connect/:code` exchange — NOT the partner-wide `HINT_API_KEY`. Persist the access token server-side, keyed by `practice_id`, and look it up on every Provider API call.
+All `/api/provider/*` calls use the **practice-scoped access token** returned by `POST /api/partner/installations/connect` (as `api_keys[0].token`) during the `/hint/connect/:code` exchange — NOT the partner-wide `HINT_API_KEY`. Persist the access token server-side, keyed by `(HINT_PRODUCT_ID, practice_id)` (a backend's Postgres can be shared across your products), and look it up on every Provider API call.
 
 ```
 Authorization: Bearer <practice_access_token>

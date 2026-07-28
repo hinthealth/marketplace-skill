@@ -178,7 +178,7 @@ curl -s -X POST "$HINT_API_URL/api/partner/products/$PRODUCT_ID/app/services" \
 
 Save the `id` from the response. If the app doesn't need custom config, **skip this step** — the next step auto-provisions a service on first deploy with default config.
 
-The reserved env vars `HINT_API_URL`, `HINT_API_KEY`, `HINT_PARTNER_ID`, `HINT_WEBHOOK_SECRET`, and `DATABASE_URL` are managed by Hint and always present — partner-supplied values for those keys are ignored. See [`_common/api-conventions.md`](../_common/api-conventions.md#reserved-env-vars).
+The reserved env vars `HINT_API_URL`, `HINT_API_KEY`, `HINT_PARTNER_ID`, `HINT_PRODUCT_ID`, `HINT_WEBHOOK_SECRET`, and `DATABASE_URL` are managed by Hint and always present — partner-supplied values for those keys are ignored. See [`_common/api-conventions.md`](../_common/api-conventions.md#reserved-env-vars).
 
 To update config on an existing service later: `PATCH /api/partner/products/$PRODUCT_ID/app/services/<id>` with the same body shape. Env var changes propagate immediately; `build_command` / `start_command` changes take effect on the next revision deploy.
 
@@ -546,6 +546,7 @@ if (process.env.HINT_DEBUG === 'true' && req.method === 'GET' && url.pathname ==
     HINT_API_KEY_set: Boolean(HINT_API_KEY),
     HINT_API_KEY_prefix: HINT_API_KEY ? HINT_API_KEY.slice(0, 8) : null,
     HINT_PARTNER_ID: HINT_PARTNER_ID,
+    HINT_PRODUCT_ID: HINT_PRODUCT_ID,
     HINT_WEBHOOK_SECRET_set: Boolean(HINT_WEBHOOK_SECRET),
     HINT_WEBHOOK_SECRET_len: HINT_WEBHOOK_SECRET?.length || 0,
     HINT_WEBHOOK_SECRET_last4: HINT_WEBHOOK_SECRET?.slice(-4) || null,
