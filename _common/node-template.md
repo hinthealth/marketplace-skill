@@ -230,14 +230,15 @@ function verifySignature(rawBody, signature) {
 }
 
 // Partner-wide calls (server-to-server) — uses the static HINT_API_KEY.
-// Examples: /api/partner/*, /api/oauth/tokens.
+// Examples: /api/partner/*, /api/partner/installations/connect.
 function hintApi(method, path, body) {
   return hintApiWith(`Bearer ${HINT_API_KEY}`, method, path, body, { parseJson: true });
 }
 
 // Practice-scoped calls — uses the per-practice access_token from the
-// /hint/connect/:code OAuth flow. Use this for any /api/provider/* call;
-// the access_token lives on the session row (see requireSession).
+// /hint/connect/:code exchange (installations/connect). Use this for any
+// /api/provider/* call; the access_token lives on the session row (see
+// requireSession).
 function hintApiAs(accessToken, method, path, body) {
   return hintApiWith(`Bearer ${accessToken}`, method, path, body, { parseJson: false });
 }
@@ -341,30 +342,30 @@ const server = http.createServer(async (req, res) => {
     return res.end(renderSettings(sessionKey, session));
   }
 
-  // Headless connect — Hint POSTs auth code during installation.
+  // Headless connect — Hint POSTs the auth code during installation.
   //
-  // The response body's `access_token` is the practice-scoped key the app
-  // uses to call `/api/provider/*` endpoints. It is NOT the same as the
-  // partner API key in HINT_API_KEY (which is partner-wide).
+  // Exchanges the code at POST /api/partner/installations/connect. The response
+  // is the installation: { practice: { id, name }, product: { name, slug },
+  // api_keys: [{ token, ... }], ... }. The practice-scoped key the app uses to
+  // call /api/provider/* is api_keys[0].token (the integration's active keys,
+  // long-lived). It is NOT HINT_API_KEY (which is partner-wide).
   //
-  // We persist the access_token onto every session row for this practice so
-  // the embedded surface can authenticate Provider API calls on every render
-  // (requireSession() returns the row with access_token already attached).
+  // We persist that token keyed by practice_id so the embedded surface can
+  // authenticate Provider API calls on every render (requireSession() returns
+  // the row with access_token already attached).
   if (req.method === 'POST' && url.pathname.startsWith('/hint/connect/')) {
     const authCode = url.pathname.replace('/hint/connect/', '');
     try {
       if (HINT_API_URL && HINT_API_KEY) {
-        const resp = await hintApi('POST', '/api/oauth/tokens', {
+        const resp = await hintApi('POST', '/api/partner/installations/connect', {
           code: authCode,
-          grant_type: 'authorization_code',
         });
-        // The OAuth response nests practice as an object: { practice: { id, name }, access_token, ... }
         const practiceId = resp.body?.practice?.id;
-        const accessToken = resp.body?.access_token;
+        const accessToken = resp.body?.api_keys?.[0]?.token;
         if (practiceId && accessToken) {
           await saveAccessToken(practiceId, accessToken);
         } else {
-          console.warn('[connect] OAuth response missing practice.id or access_token:', JSON.stringify({
+          console.warn('[connect] installations/connect response missing practice.id or api_keys token:', JSON.stringify({
             status: resp.status,
             keys: Object.keys(resp.body || {}),
           }));

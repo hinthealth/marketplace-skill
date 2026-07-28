@@ -185,11 +185,11 @@ For each service:
 
 ### 3.10 Cross-practice tenancy probe (CRITICAL)
 
-Static analysis can't reliably catch tenancy bugs — the only test that catches mis-scoping is exercising the app from two practices and confirming each can't read the other's data. This check requires two sandbox practices, fresh OAuth tokens for both, and a known write endpoint on the app — the most setup-heavy check in the suite. Run it last; skip cleanly (with a logged note) if the partner can't provide the inputs.
+Static analysis can't reliably catch tenancy bugs — the only test that catches mis-scoping is exercising the app from two practices and confirming each can't read the other's data. This check requires two sandbox practices, fresh practice access tokens for both, and a known write endpoint on the app — the most setup-heavy check in the suite. Run it last; skip cleanly (with a logged note) if the partner can't provide the inputs.
 
 **Prerequisites:**
 - The partner has at least two sandbox practices set up (create via Partner Portal → Sandboxes if not).
-- API keys for both practices' installations of the app — these are different from the partner-wide API key. They come from the OAuth-exchange that runs on `/hint/connect/:code`.
+- API keys for both practices' installations of the app — these are different from the partner-wide API key. They come from the installation-connect exchange (`POST /api/partner/installations/connect`) that runs on `/hint/connect/:code`.
 - A way to write at least one piece of practice-scoped data via the app (call this the "probe write" — usually a POST to one of the app's own API routes).
 
 **Probe sequence:**
