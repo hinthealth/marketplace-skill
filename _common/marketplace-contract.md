@@ -7,7 +7,7 @@ Every Hint marketplace app — regardless of stack or hosting — has to impleme
 | Route | What it does |
 |---|---|
 | `POST /hint/handshake` | Receives a signed payload from Hint at install/embed time. The app verifies the `X-Hint-Signature` header (HMAC-SHA256 of the request body, key = the partner's webhook secret), mints a session key, persists `{session_key, user, practice}` server-side, and returns the session key. |
-| `POST /hint/connect/:code` | Receives an authorization code from Hint after a practice installs the app. The app exchanges the code at `POST $HINT_API_URL/api/partner/installations/connect` for the installation (the practice-scoped credential is in `api_keys[0].token`) and persists `{partner_id, practice_id, access_token}` keyed by practice. |
+| `POST /hint/connect/:code` | Receives an authorization code from Hint after a practice installs the app. The app exchanges the code at `POST $HINT_API_URL/api/partner/installations/connect` for the installation (the practice-scoped credential is in `api_keys[0].token`) and persists `{partner_id, practice_id, access_token}` keyed by practice. The response also carries the installed `product` (`{ name, slug }`) — record it if you offer more than one product, so you can tell which one each practice installed. |
 | `GET /hint/<surface_type>?session_key=...` | Renders the embedded UI for the surface type. Looks up the session by `session_key`, recovers the practice context, then renders the surface. `<surface_type>` is one of `core_page`, `clinical_interaction`, or `settings`. |
 
 ## Activation mode: `connect` always fires; `pending` vs `active` is separate
