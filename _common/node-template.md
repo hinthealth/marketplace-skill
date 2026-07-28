@@ -113,29 +113,25 @@ async function ensureSchema(attempt = 1) {
       );
     `);
     await pool.query('CREATE INDEX IF NOT EXISTS sessions_practice_id_idx ON sessions(practice_id);');
-    // practice_tokens is scoped by (product_id, practice_id), NOT session_key,
-    // so the connect handler can write the token even when no session row
-    // exists yet (in managed-hosted mode Hint POSTs /hint/connect/:code BEFORE
-    // the user opens the iframe). getSession() joins this table.
+    // practice_tokens is keyed by (product_id, practice_id), NOT session_key, so
+    // the connect handler can write the token even when no session row exists
+    // yet (in managed-hosted mode Hint POSTs /hint/connect/:code BEFORE the user
+    // opens the iframe). getSession() joins this table.
     //
-    // The product_id scope matters because a backend's Postgres is shared by
-    // every app whose product is on that backend — without it, two products a
-    // practice installs would overwrite each other's access token. HINT_PRODUCT_ID
-    // is the running app's own product; when unset, product_id defaults to ''
-    // (single namespace, same as before).
+    // A backend's Postgres is shared by every app whose product is on that
+    // backend, and a practice's installs there share one integration — so the
+    // access token is the SAME across those products. Keying by product just
+    // records which products a practice installed; the token is identical for
+    // all. HINT_PRODUCT_ID is this app's own product ('' when unset).
     await pool.query(`
       CREATE TABLE IF NOT EXISTS practice_tokens (
         product_id   TEXT NOT NULL DEFAULT '',
         practice_id  TEXT NOT NULL,
         access_token TEXT NOT NULL,
-        updated_at   TIMESTAMPTZ DEFAULT NOW()
+        updated_at   TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (product_id, practice_id)
       );
     `);
-    // Migrate a pre-existing single-product table (practice_id PRIMARY KEY) to
-    // the composite key. Idempotent — safe to run on every boot.
-    await pool.query(`ALTER TABLE practice_tokens ADD COLUMN IF NOT EXISTS product_id TEXT NOT NULL DEFAULT '';`);
-    await pool.query(`ALTER TABLE practice_tokens DROP CONSTRAINT IF EXISTS practice_tokens_pkey;`);
-    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS practice_tokens_product_practice_key ON practice_tokens (product_id, practice_id);`);
     console.log('Sessions schema ready');
   } catch (err) {
     if (attempt >= 5) {
@@ -160,9 +156,9 @@ async function saveSession(sessionKey, practiceId, userData) {
 
 async function saveAccessToken(productId, practiceId, accessToken) {
   // Upsert keyed by (product_id, practice_id) so this works regardless of
-  // whether a session row exists yet, and so products sharing a backend
-  // database don't clobber each other's token. Decouples /hint/connect/:code
-  // from /hint/handshake ordering.
+  // whether a session row exists yet, and so each product install is recorded
+  // as its own row (the token itself is the same across a practice's products
+  // on one backend). Decouples /hint/connect/:code from /hint/handshake ordering.
   await pool.query(
     `INSERT INTO practice_tokens (product_id, practice_id, access_token)
      VALUES ($1, $2, $3)
@@ -173,8 +169,8 @@ async function saveAccessToken(productId, practiceId, accessToken) {
 }
 
 async function getSession(sessionKey) {
-  // Join this app's own product's token (HINT_PRODUCT_ID) — the shared table
-  // may hold other products' tokens for the same practice.
+  // Join this app's own product row (HINT_PRODUCT_ID) — the shared table may
+  // hold rows for other products the practice installed (same token value).
   const { rows } = await pool.query(
     `SELECT s.session_key, s.practice_id, s.user_data, t.access_token
        FROM sessions s
@@ -370,7 +366,8 @@ const server = http.createServer(async (req, res) => {
   // We persist that token keyed by (HINT_PRODUCT_ID, practice_id) so the
   // embedded surface can authenticate Provider API calls on every render
   // (requireSession() returns the row with access_token already attached), and
-  // so products sharing a backend database don't clobber each other's token.
+  // so each product install is recorded (the token is the same across a
+  // practice's products on one backend).
   if (req.method === 'POST' && url.pathname.startsWith('/hint/connect/')) {
     const authCode = url.pathname.replace('/hint/connect/', '');
     try {
