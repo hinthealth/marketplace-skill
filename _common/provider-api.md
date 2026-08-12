@@ -80,6 +80,34 @@ Clinical interactions carry a boolean `patient_access` field on both the list (`
 
 **Labs: show only the PDF report to patients.** For lab interactions, even when `patient_access` is `true`, display only the lab's PDF report (the file under the interaction's `report`/files) to patients — not the raw structured result values. This is a data-display restriction from the lab data source (Health Gorilla). Raw result fields can be used in provider-facing views, but patient-facing surfaces must render the PDF only.
 
+## Downloading interaction files
+
+Clinical interactions carry their attachments as a `files` array on the interaction response, each entry `{ id, filename }`. That payload names the files but is not itself downloadable — the raw storage keys are private. To get bytes you exchange a file for a short-lived signed URL through one of two endpoints:
+
+```
+GET /api/provider/interactions/{id}/files/download_urls          → every file on the interaction
+GET /api/provider/interactions/{id}/files/{file_id}/download_url  → one file, by its `id` from the files array
+```
+
+Both return the same element shape (`download_urls` a bare array of them, `download_url` a single one):
+
+```json
+{
+  "id": "Fah-3TWDJuQ1MSe-lBTiPh",
+  "filename": "lab-results.pdf",
+  "url": "https://practice-bucket.s3.amazonaws.com/...?X-Amz-Signature=...",
+  "expires_at": "2026-07-01T12:05:00.000Z"
+}
+```
+
+**URLs are PDF-only.** Only files that resolve to `application/pdf` get a signed `url`. On `download_urls` a non-PDF stays in the array with `url: null` and `expires_at: null` (so you can tell "not downloadable" from "not returned"). On `download_url` a non-PDF is a `422`, and an `id` that isn't on that interaction is a `404`.
+
+**URLs are short-lived — sign at download time.** `expires_at` is about 5 minutes out and the link is meant to be used once, not saved. Call the endpoint when the user actually clicks download, then redirect to (or fetch) the returned `url` — do not cache it, store it in your DB, or precompute it during a sync.
+
+This is the mechanism behind the labs-PDF rule above: to show a patient a lab's PDF report, take that file's `id` from the interaction's `files` array and fetch its `download_url`.
+
+**Available since API version `2026-07-01`.** Clients pinned to an earlier version get `404` on both routes.
+
 ## Delta queries via `updated_at[gt]`
 
 List endpoints with an `updated_at` filter (interactions, memberships, patients, etc.) accept the bracket-notation operators `[gte]`, `[gt]`, `[lte]`, `[lt]` — same shape as the `created_at` filter mentioned above. Useful when an app needs "what changed since the last sync" instead of the full list:
