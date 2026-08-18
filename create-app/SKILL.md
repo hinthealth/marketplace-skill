@@ -420,6 +420,8 @@ curl -s -X PATCH "$HINT_API_URL/api/partner/products/$PRODUCT_ID" \
 
 These 5 fields cover the listing card. **Overview, Highlights, Testimonials, Categories, Links, and Preconditions are also partner-settable** via their own per-section endpoints — use the [`fill-listing`](https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/fill-listing/SKILL.md) skill for the guided workflow, or hit them directly at `/api/partner/products/$PRODUCT_ID/{overview|highlights|testimonials|links|preconditions}` (and `/api/partner/products/$PRODUCT_ID/categories`). Pricing and install Requirements are NOT partner-settable — those are hinter-curated decisions; email [devsupport@hint.com](mailto:devsupport@hint.com) to change them.
 
+Beyond the listing, the same `PATCH /api/partner/products/$PRODUCT_ID` accepts `default_charge_category_type` — the **default charge category** applied to the product's patient charges when a charge doesn't specify its own. It must be one of the default charge category types (`memberships`, `labs`, `medications`, `vitamins_and_supplements`, `vaccines`, `imaging`, `supplies_and_dme`, `retail_items`, `office_visits`, `procedures`, `fees`); send an empty value to clear it (charges then fall back to Unassigned). A charge can still override it per charge with its own `category` (by `id` or `type`).
+
 The `slug` and `type` fields are set when the product is first created and **are not editable via API** afterwards — if the user wants to rename the URL slug or change product type after creation, they have to email [devsupport@hint.com](mailto:devsupport@hint.com).
 
 ### Product status lifecycle
