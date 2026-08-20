@@ -581,7 +581,6 @@ function renderClinicalInteraction(sessionKey, session) {
     }
     if (typeof HintSDK !== 'undefined') {
       HintSDK.init(() => { updatePatient(HintSDK.currentPatient); });
-      HintSDK.onCurrentPatientChanged(updatePatient);
     }
   </script>
 </body>
