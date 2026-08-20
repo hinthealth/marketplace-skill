@@ -153,9 +153,8 @@ The SDK runs inside the iframe Hint embeds, so the host it's served from must ma
 | `HintSDK.user` | object | `{ id, name, email, first_name, last_name, phones }`. The currently signed-in staff user. Note: `partner_roles` and `access_context` are NOT on the SDK user object — they are delivered only in the server-to-server handshake payload (see [`marketplace-contract.md`](./marketplace-contract.md#handshake-payload-shape)). Read them on your server, not in the browser. |
 | `HintSDK.currentPatient` | object \| null | `{ id, name }` if the user is viewing a patient (clinical_interaction / core_page surfaces); `null` otherwise. |
 | `HintSDK.interaction` | object \| null | `{ id }` if the surface is a clinical interaction; `null` otherwise. Most `core_page` and `settings` surfaces will see `null` here. |
-| `HintSDK.onCurrentPatientChanged(callback)` | function | Subscribes to current-patient updates. Callback receives the new patient object (or `null`). Use this when the surface needs to react to the user switching charts without reloading. |
 
-`HintSDK.currentPatient` is the only field that changes after `init`; `user` and `interaction` are fixed for the lifetime of the surface. Critical for `clinical_interaction` apps that need to follow the chart selection — without `onCurrentPatientChanged`, the surface will stale-render the patient it was opened with.
+Every SDK field is fixed for the lifetime of the surface, `currentPatient` included. Read it once in the `init` callback. If the user switches to another patient on a surface that allows it, Hint tears the embed down and mounts it again with a fresh `init()` carrying the new patient — your page reloads from scratch rather than being notified in place. Keep anything that must survive that reload on your backend, keyed by practice and patient ID, and never build cross-patient state into one surface.
 
 ## What partner apps cannot match exactly
 
