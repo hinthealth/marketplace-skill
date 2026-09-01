@@ -170,7 +170,7 @@ PASS: no reserved keys in `env_vars`. FAIL: any of them present (Hint ignores th
 Some surfaces are sensitive to misconfiguration. For each surface:
 
 - `core_page`: `source_url` should end in `/hint/core_page` (convention; not enforced).
-- `clinical_interaction`: `source_url` should end in `/hint/clinical_interaction`. Surface's `interaction_type` field should be set if the partner expects to filter by interaction type.
+- `clinical_interaction`: `source_url` should end in `/hint/clinical_interaction`. Surface's `interaction_type` is `general` or `lab` and defaults to `general` — it decides where the surface opens, not how it is filtered. FAIL on any other value: the API rejects it, so the surface cannot be edited until it is corrected. An app may hold one `clinical_interaction` surface per interaction type, so a second surface of the same type is also a FAIL.
 - `settings`: `source_url` should end in `/hint/settings`. Surface's `settings_label` should be set (otherwise the tab shows the app's generic name).
 
 The partner is free to host the surface at any path that returns valid HTML — the convention just makes templates and audit reports easier to read. WARN (not FAIL) on deviations.
