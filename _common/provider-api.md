@@ -74,6 +74,28 @@ The list-form siblings (`GET /api/provider/interactions?type=lab&...`) have loos
 
 The template's `hintApi()` wrapper handles single-request retries on `429` with exponential backoff, but partners building dashboard-style apps will still need to **gate the fan-out itself**, not just per-request retries — a 100-request burst at concurrency 5 produces a 429 cascade that retries forever even if each individual retry "works". Use a simple semaphore in JS (`p-limit` or a hand-rolled `Promise.all` chunker) or equivalent in your stack.
 
+## Creating an interaction when the partner has several installed products
+
+`POST /api/provider/patients/{id}/interactions/partner` (and the `/interactions/lab` sibling) attributes
+the interaction to one of your installed products, so Hint can reopen the right app later. It works out
+which one in this order:
+
+1. `partner_product_id` in the request body, if you send one;
+2. the product whose app session minted the API key, when the call comes from an embedded surface;
+3. the practice's only installed product of yours, when there is exactly one.
+
+If the practice has installed **more than one** of your products and neither of the first two applies, the
+create fails with `400` and a message beginning `Multiple products are installed for this practice`. This
+is the common trap for a partner with several marketplace listings: the same code that works at every
+single-product practice starts failing at a two-product one, with nothing about the request having changed.
+
+Send `partner_product_id` explicitly whenever your backend knows which product it is acting for — it is
+accepted at every practice, single-product ones included, so there is no reason to make it conditional.
+The value is the product's `ppro-…` id, and it is validated against that practice's installed products, so
+naming a product the practice has not installed is also a `400`.
+
+Calls made from inside an embedded surface do not need it: the session already names the product.
+
 ## `patient_access` — which interactions the patient can see
 
 Clinical interactions carry a boolean `patient_access` field on both the list (`GET /api/provider/interactions`) and detail endpoints. It is `true` when the interaction has been shared with the patient and is viewable by them, `false` otherwise. Use it to decide what a patient-facing surface should display — do not assume every interaction returned by the Provider API is patient-viewable.
