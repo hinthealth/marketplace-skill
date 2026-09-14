@@ -411,6 +411,15 @@ const server = http.createServer(async (req, res) => {
   // ============================================================
   if (url.pathname.startsWith('/hint/api/provider/')) {
     const session = await requireSession(req, res); if (!session) return;
+    // This proxy forwards whatever path the browser asks for, so the one
+    // provider path that returns a partner's secret is refused here. Fetch that
+    // one server-side instead — see _common/partner-credentials.md.
+    if (/^\/hint\/api\/provider\/installations\/[^/]+\/credential$/.test(url.pathname)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({
+        error: 'Partner credentials must be fetched server-side, not through this proxy.',
+      }));
+    }
     if (!session.access_token) {
       res.writeHead(503, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({
@@ -658,6 +667,8 @@ async function fetchPatientsBroken() {
   return r.json(); // → 401 Unauthorized
 }
 ```
+
+**One path is deliberately blocked**: `GET /api/provider/installations/<slug>/credential` returns another partner's secret, and this proxy would hand it straight to the browser. The handler refuses it with a `403`. Fetch that one server-side and return only the partner's response to your UI — full rules in [`partner-credentials.md`](./partner-credentials.md). Discovery (`GET /api/provider/partner_credentials`) carries no secret and passes through the proxy normally.
 
 Why: the `access_token` for `/api/provider/*` is **practice-scoped** and lives on the session row (Postgres). The browser never has it (and shouldn't — exposing it would let any page on the embed origin act as the practice). The proxy looks the token up from `session.access_token` server-side, forwards the upstream call with `Authorization: Bearer <access_token>`, and returns the response. Path mapping is straight: `/hint/api/provider/X` → `https://api.hint.com/api/provider/X`. Query strings, request bodies, and HTTP methods all pass through unchanged.
 
