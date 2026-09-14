@@ -40,6 +40,19 @@ For server-to-server calls (background jobs, webhook handlers) that already have
 
 Full template-side code is documented in [`node-template.md` § "Calling Hint's Provider API from the embedded UI"](./node-template.md#calling-hints-provider-api-from-the-embedded-ui).
 
+## Calling another installed partner's API
+
+A practice usually has several partners installed, and your app can call one of their
+APIs on the practice's behalf using the credential that partner issued the practice.
+`GET /api/provider/partner_credentials` lists what is available and
+`GET /api/provider/installations/<product_slug>/credential` returns one.
+
+The credential is a secret and must stay server-side — the template's
+`/hint/api/provider/*` proxy refuses the fetch path for that reason. Full contract,
+the `call_path` branch, and the rules that keep it safe are in
+[`partner-credentials.md`](./partner-credentials.md). Read that before writing any
+cross-partner code.
+
 ## Endpoint discovery
 
 Use the MCP server (above) for the canonical list of available endpoints, parameters, and response schemas. A few gotchas worth knowing up-front:

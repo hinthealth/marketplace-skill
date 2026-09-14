@@ -18,6 +18,7 @@ Fetch and read these before running anything — the audit checks are derived fr
 2. https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/_common/api-conventions.md — host + auth rules
 3. https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/_common/provider-api.md — the practice-scoped token rule
 4. https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/_common/provider-api-fields.md — field names + status-vs-enrollment_status + revenue-source gotchas (needed if the audit looks at the app's metric/KPI code)
+5. https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/_common/partner-credentials.md — what the app may do with another partner's credential (needed for check 3.11)
 
 ## Platform URLs
 
@@ -207,6 +208,42 @@ If the app has no partner-controlled write endpoints (read-only against `/api/pr
 
 Surface fixes from the [`retrofit` tenancy audit](https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/retrofit/SKILL.md) — schema changes + per-table `practice_id` + every query scoped. See `_common/marketplace-contract.md` "Tenancy" section.
 
+### 3.11 Partner-credential exposure through the provider proxy (CRITICAL)
+
+Apps built from the template proxy browser calls to `/api/provider/*`. That proxy
+forwards whatever path it is given, so unless it excludes the credential path a
+browser can ask it for another partner's secret and get one. This is a live probe,
+not static analysis — run it against a real session.
+
+**Prerequisites:** a `session_key` from a completed handshake + connect, and a
+`product_slug` the practice holds a credential for. Get one from discovery, which is
+safe to call:
+
+```bash
+curl -s "$APP_URL/hint/api/provider/partner_credentials" -H "x-hint-session-key: $SESSION_KEY"
+```
+
+Then ask the proxy for the credential itself:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}' \
+  "$APP_URL/hint/api/provider/installations/$PRODUCT_SLUG/credential" \
+  -H "x-hint-session-key: $SESSION_KEY"
+```
+
+PASS: `403` (or `404`) — the proxy refuses the path. FAIL: `200`, **especially** if
+the body contains a `payload` field. That is a partner's secret reachable from any
+script running on the embed origin — the app must not go live until it is fixed.
+
+Skip with a note if the app exposes no `/api/provider/*` proxy at all
+(`SKIPPED — app has no provider proxy`); a purely server-side app cannot have this bug.
+
+Remediation: exclude the credential path from the proxy handler and fetch it
+server-side instead. Pattern in
+[`_common/node-template.md`](https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/_common/node-template.md),
+rules in
+[`_common/partner-credentials.md`](https://raw.githubusercontent.com/hinthealth/marketplace-skill/main/_common/partner-credentials.md).
+
 ## Step 4: Output the Report
 
 Print a structured report grouped by severity. Example:
@@ -232,6 +269,7 @@ INFO / PASS:
   ✓ 3.5 valid signatures accepted (smoke test passed)
   ✓ 3.7 no reserved keys in custom env_vars
   ✓ 3.9 all services active
+  ✓ 3.11 provider proxy refuses the partner-credential path
 
 Remediation:
   - 3.3: Audit POST /hint/handshake handler. Confirm raw body is captured before JSON parsing and constant-time HMAC compare is used. See _common/marketplace-contract.md.
@@ -242,7 +280,7 @@ Remediation:
 
 ## Step 5: Severity Levels
 
-- **CRITICAL** — security or functional break. App should not go live until fixed. Includes: handshake accepts unsigned requests, handshake accepts forged signatures, plain-http URLs leaking session keys, services in `provisioning_failed`, cross-practice data leak (3.10 probe fails).
+- **CRITICAL** — security or functional break. App should not go live until fixed. Includes: handshake accepts unsigned requests, handshake accepts forged signatures, plain-http URLs leaking session keys, services in `provisioning_failed`, cross-practice data leak (3.10 probe fails), partner credentials reachable through the provider proxy (3.11 probe fails).
 - **HIGH** — functional issue. App will fail in some real-world scenarios. Includes: surface URLs returning 404 / 5xx, missing handshake_url, missing redirect_url.
 - **MEDIUM** — quality / UX issue. App works but looks incomplete. Includes: missing partner.email, missing surface labels, partner.name placeholder text.
 - **WARN** — convention deviation. Not wrong, just unusual. Includes: surface source_url paths that don't match the template convention.

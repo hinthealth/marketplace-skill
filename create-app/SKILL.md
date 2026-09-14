@@ -153,6 +153,21 @@ The access token from handshake/connect lets the embedded app read practice data
 
 > **Always call `/api/provider/*` via the template's built-in proxy, never directly from the browser.** The template ships a `/hint/api/provider/*` route handler that forwards to Hint with the practice's session access_token attached server-side. Client-side code should use `fetch('/hint/api/provider/patients', { headers: { 'x-hint-session-key': SESSION_KEY } })`, not `fetch('https://api.hint.com/api/provider/patients')` — the latter has no Authorization header and 401s on every request. The session token is practice-scoped and lives only on the server; the proxy is what bridges the two. Full pattern + worked examples are in [`_common/node-template.md` § "Calling Hint's Provider API from the embedded UI"](../_common/node-template.md#calling-hints-provider-api-from-the-embedded-ui).
 
+### Talking to another installed partner
+
+If the app needs data from a partner the practice *already uses* — pulling lab results,
+EHR records, or billing data from another marketplace product into your surface — the
+practice's credential for that partner is available to your app. Discovery
+(`GET /api/provider/partner_credentials`) lists what the practice holds; a per-product
+fetch returns the one you need.
+
+Read [`_common/partner-credentials.md`](../_common/partner-credentials.md) before
+writing any of it. The three rules that bite hardest: the credential must never reach
+the browser (the provider proxy refuses that path on purpose), generated code must
+branch on `call_path` rather than assuming a direct call, and both endpoints only work
+from your deployed Hint app — so a `403` while testing locally is the gate working,
+not a broken token.
+
 **Before writing any KPI/metric/dashboard code**, read [`_common/provider-api-fields.md`](../_common/provider-api-fields.md) for the schema sketch + gotchas on the top five resources (patients, memberships, customer_invoices, payments, practitioners). It covers the family-vs-individual membership shape, the `status` vs `enrollment_status` disambiguation, where revenue actually lives (NOT `customer_invoices.charges`), and the sandbox `created_at` quirk that flattens every time-series chart. Skipping this file is the difference between a working v1 and a ship-zero-everywhere v1.
 
 Default to a straightforward "fetch on every render" loop — the `hintApi()` wrapper handles retries on `429`, and a single-patient or settings surface won't hit any throughput wall. **Advanced caching patterns are optional** and live in [`_common/caching-patterns.md`](../_common/caching-patterns.md); reach for them only when the partner explicitly asks, OR when the surface is a fan-out dashboard summarizing data across the practice's whole panel and you observe cold loads >8 s or `429` rate-limit cascades in the logs. Don't bake the snapshot + delta + advisory-lock recipe into v1 — it adds complexity that most apps don't need and that's hard to get right on the first try.
