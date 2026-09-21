@@ -117,7 +117,7 @@ Clinical interactions carry a boolean `patient_access` field on both the list (`
 
 ## Downloading interaction files
 
-Clinical interactions carry their attachments as a `files` array on the interaction response, each entry `{ id, filename }`. That payload names the files but is not itself downloadable — the raw storage keys are private. To get bytes you exchange a file for a short-lived signed URL through one of two endpoints:
+Clinical interactions carry their attachments as a `files` array on the interaction response, each entry `{ id, filename, type }`. That payload names the files but is not itself downloadable — the raw storage keys are private. To get bytes you exchange a file for a short-lived signed URL through one of two endpoints:
 
 ```
 GET /api/provider/interactions/{id}/files/download_urls          → every file on the interaction
@@ -130,10 +130,13 @@ Both return the same element shape (`download_urls` a bare array of them, `downl
 {
   "id": "Fah-3TWDJuQ1MSe-lBTiPh",
   "filename": "lab-results.pdf",
+  "type": "lab_result",
   "url": "https://practice-bucket.s3.amazonaws.com/...?X-Amz-Signature=...",
   "expires_at": "2026-07-01T12:05:00.000Z"
 }
 ```
+
+**`type` is `null` for most files.** Send every attachment in `files`. Hint stores it and reports `type` as `null`. Lab interactions add two fields. A partner sends the lab's paperwork in `requisition_files` and its report in `result_files`. Those entries come back typed `lab_requisition` and `lab_result`. `type` changes nothing about downloads.
 
 **URLs are PDF-only.** Only files that resolve to `application/pdf` get a signed `url`. On `download_urls` a non-PDF stays in the array with `url: null` and `expires_at: null` (so you can tell "not downloadable" from "not returned"). On `download_url` a non-PDF is a `422`, and an `id` that isn't on that interaction is a `404`.
 
