@@ -154,7 +154,7 @@ A typed file (`lab_requisition` or `lab_result`) is removed by its `id` from the
 DELETE /api/provider/interactions/{id}/files/{file_id}
 ```
 
-A `204` with no body confirms the removal and the file leaves the `files` array. The file moves to the trash, where it stays recoverable.
+A `204` with no body confirms the removal and the file leaves the `files` array.
 
 **It is the only removal for a typed file.** `files: []` on an update leaves `lab_requisition` and `lab_result` entries attached, so a partner that clears `files` and expects a lab's report to go with it keeps seeing it in the array.
 
