@@ -146,6 +146,24 @@ This is the mechanism behind the labs-PDF rule above: to show a patient a lab's 
 
 **Available since API version `2026-07-01`.** Clients pinned to an earlier version get `404` on both routes.
 
+## Deleting one interaction file
+
+A typed file (`lab_requisition` or `lab_result`) is removed by its `id` from the `files` array, the same `id` the single-file download endpoint takes:
+
+```
+DELETE /api/provider/interactions/{id}/files/{file_id}
+```
+
+A `204` with no body confirms the removal and the file leaves the `files` array.
+
+**It is the only removal for a typed file.** `files: []` on an update leaves `lab_requisition` and `lab_result` entries attached, so a partner that clears `files` and expects a lab's report to go with it keeps seeing it in the array.
+
+**It refuses an untyped file.** An `id` whose `type` is `null` (a file sent through `files`, or one stored before typed files) is a `422` whose message names the path: `File predates typed files; clear it with PATCH files: []`. `files: []` remains the only removal for untyped files, and it removes every one of them on the interaction, including files a provider attached in the Hint UI, so send it only when that is what you mean.
+
+An `id` that isn't on that interaction is a `404`, and so is a second delete of the same `id`. The key needs to manage interactions: a read-only key is refused.
+
+**Available since API version `2026-07-01`**, like the download routes.
+
 ## Delta queries via `updated_at[gt]`
 
 List endpoints with an `updated_at` filter (interactions, memberships, patients, etc.) accept the bracket-notation operators `[gte]`, `[gt]`, `[lte]`, `[lt]` — same shape as the `created_at` filter mentioned above. Useful when an app needs "what changed since the last sync" instead of the full list:
