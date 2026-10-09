@@ -20,6 +20,7 @@ The full patient record; the most-queried resource in the API.
 id, name, first_name, last_name, email, dob, sex, gender,
 joined_practice_date,      // ← bucket here, NOT created_at
 membership_status,         // patient-level membership lifecycle ('active'|'inactive'|...)
+autopay,                   // ← creating a payment does NOT check this; read it on the invoice owner before charging
 account: { past_due_in_cents }
 practitioner: { id, name, ... }  // ← attribution lives HERE, nested
 location: { id, name, address_state, ... }
