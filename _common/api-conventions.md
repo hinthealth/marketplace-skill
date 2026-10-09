@@ -37,30 +37,32 @@ Use `limit` + `offset` (not `page` / `page_size`):
 GET /api/provider/patients?limit=50&offset=100
 ```
 
-Max `limit` is 100. If a response returns exactly `limit` rows, there are likely more — paginate by incrementing `offset`.
+Max `limit` is 100, and a larger value is silently treated as 100. Always send `limit` of 100 or less, then keep incrementing `offset` until a page returns fewer rows than the `limit` you sent. `X-Total-Count` gives the total matching your filters (ignoring `limit`/`offset`); `X-Count` is the rows on this page.
+
+Offset pages are not a snapshot: rows created, deleted or edited mid-run can shift between pages. De-duplicate by `id`.
 
 ## Date filters
 
-Timestamp fields accept bracketed operators:
+Timestamp fields that an endpoint documents as filters accept bracketed operators:
 
 ```
 GET /api/provider/customer_invoices?created_at[gte]=2026-01-01&created_at[lte]=2026-12-31
 ```
 
-Each timestamp field (`created_at`, `updated_at`, `paid_at`, etc.) accepts `[gte]`, `[gt]`, `[lte]`, `[lt]`, `[eq]`. This is the most common filter idiom after pagination.
+The operators are `[gte]`, `[gt]`, `[lte]`, `[lt]`. There is no `[eq]`; it returns a 500. For a single day use `[gte]` that day and `[lt]` the next day. This is the most common filter idiom after pagination.
+
+Only filter on parameters the endpoint's reference page lists. Unknown filter names are silently ignored, so a typo, or a field that appears in the response but isn't a filter (for example `paid_at` on customer invoices), returns every row unfiltered.
 
 ## Sandbox `created_at` is the seed-run timestamp
 
 In sandbox, every record's `created_at` (patient, membership, invoice, payment) is the timestamp of the seed run that loaded the data — they're all within seconds of each other. Any chart bucketed on `created_at` will be flat-flat-flat-spike-on-seed-day for every metric. Bucket by domain dates instead: `joined_practice_date` (patients), `start_date` / `end_date` (memberships), `paid_at` / `date` (invoices, payments), `bill_date` / `next_bill_date` (membership billing). This is the correct choice in live too — patients are sometimes backdated for compliance, memberships start mid-period, etc.
 
-## Archived rows are excluded by default
+## Default scope differs per list endpoint
 
-List endpoints filter out archived records by default. Inverse queries:
+- **Patients** exclude archived patients by default. `?filter=archived` returns only archived patients. There is no option that returns both; make two calls.
+- **Customer invoices** include every status, `draft` and `cancelled` (voided) included, and exclude deleted invoices. Filter with `status[]=paid&status[]=issued` (repeated brackets; a comma list like `status=paid,issued` matches nothing).
 
-- `?filter=archived` — only archived
-- `?filter=all` — both active and archived
-
-If a partner app shows "no records" and the practice expects to see some, archive state is the first thing to check.
+If a partner app shows "no records" and the practice expects to see some, check the endpoint's default scope first.
 
 ## Reserved env vars
 
