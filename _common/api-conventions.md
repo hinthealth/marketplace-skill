@@ -60,7 +60,7 @@ In sandbox, every record's `created_at` (patient, membership, invoice, payment) 
 ## Default scope differs per list endpoint
 
 - **Patients** exclude archived patients by default. `?filter=archived` returns only archived patients. There is no option that returns both; make two calls.
-- **Customer invoices** include every status, `draft` and `cancelled` (voided) included, and exclude deleted invoices. Filter with `status[]=paid&status[]=issued` (repeated brackets; a comma list like `status=paid,issued` matches nothing).
+- **Customer invoices** include every status, `draft` and `cancelled` (voided) included. Filter with `status[]=paid&status[]=issued` (repeated brackets; a comma list like `status=paid,issued` matches nothing).
 
 If a partner app shows "no records" and the practice expects to see some, check the endpoint's default scope first.
 
