@@ -77,6 +77,8 @@ Detail (`/{id}`) endpoints on `/api/provider/*` rate-limit aggressively — empi
 
 The list-form siblings (`GET /api/provider/interactions?type=lab&...`) have looser limits and should be the default fetch shape — paginate the list, then only detail-fetch individual records when the UI genuinely needs the full body.
 
+For labs, the list already returns the full lab body: `vendor_order_id`, `order`, `results`, and `report`. A detail fetch of a lab is not necessary to show its results.
+
 **Recommended concurrency caps for partner apps:**
 
 | Workload | Cap |
@@ -166,7 +168,7 @@ An `id` that isn't on that interaction is a `404`, and so is a second delete of 
 
 ## Delta queries via `updated_at[gt]`
 
-List endpoints with an `updated_at` filter (interactions, memberships, patients, etc.) accept the bracket-notation operators `[gte]`, `[gt]`, `[lte]`, `[lt]` — same shape as the `created_at` filter mentioned above. Useful when an app needs "what changed since the last sync" instead of the full list:
+List endpoints with an `updated_at` filter (interactions, memberships, patients, etc.) accept the bracket-notation operators `[gte]`, `[gt]`, `[lte]`, `[lt]` — same shape as the `created_at` filter mentioned above. Useful when an app needs "what changed since the last sync" instead of the full list. Each interaction in the response has `created_at` and `updated_at`:
 
 ```
 GET /api/provider/interactions?type=lab&updated_at[gt]=2026-05-22T18:00:00Z
