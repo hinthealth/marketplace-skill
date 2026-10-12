@@ -66,7 +66,7 @@ Use the MCP server (above) for the canonical list of available endpoints, parame
 
 ## Response conventions
 
-Every Provider API client should follow the conventions in [`api-conventions.md`](./api-conventions.md): list endpoints return bare JSON arrays, pagination is `limit`/`offset`, date filters use bracketed operators (`?created_at[gte]=...`), and archived rows are excluded by default. Read that file first — getting the response shape wrong silently produces empty results.
+Every Provider API client should follow the conventions in [`api-conventions.md`](./api-conventions.md): list endpoints return bare JSON arrays, pagination is `limit`/`offset`, date filters use bracketed operators (`?created_at[gte]=...`), and default scope differs per endpoint (patients hide archived; customer invoices include drafts and voided). Read that file first — getting the response shape wrong silently produces empty results.
 
 ## Rate-limited endpoints — keep detail-fetch concurrency low
 
