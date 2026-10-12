@@ -97,7 +97,7 @@ curl "$HINT_API_URL/api/partner/webhook_events" \
   -H "Authorization: Bearer $HINT_API_KEY"
 ```
 
-Returns a flat array of `resource.action` strings (e.g. `["company.created", "customer_invoice.paid", "patient.inactive", ...]`) derived from Hint's live event registry. Use this list to know what event types your handler may see. New `resource.action` pairs may be added without an API version bump — implementations should `default:` ignore unknown types rather than reject.
+Returns a flat array of `resource.action` strings (e.g. `["company.created", "customer_invoice.paid", "patient.inactive", ...]`) scoped to the partner's pinned API version, and it matches what delivery will actually send. Use this list to know what event types your handler may see. New `resource.action` pairs may be added without an API version bump — implementations should `default:` ignore unknown types rather than reject. Retiring a pair does take a version bump: `integration.activated` and `integration.deactivated` were retired in `2026-07-01`, so handle `installation.activated` / `installation.deactivated` instead — one per practice install rather than one for the whole integration.
 
 **Payload shape** delivered to `webhook_url`:
 
