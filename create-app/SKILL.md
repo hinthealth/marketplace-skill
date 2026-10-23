@@ -37,7 +37,7 @@ Ask the user three things:
    - **Settings** (`settings`) — embedded inside the practice's settings area, alongside Hint's own configuration tabs. Best for partner-specific configuration UI (API keys the practice needs to enter, feature toggles, sync schedules, etc.). The surface is labeled via `settings_label` on the API (defaults to the app name).
 
 3. **How do you want to host it?**
-   - **Hosted** — Hint generates the app and runs it on Hint-managed infrastructure. Easiest path; you write nothing yourself. Pick this unless you have a specific reason not to. Hosted Mode runs `node server.js` and currently supports Node.js only.
+   - **Hosted** — Hint generates the app and runs it on Hint-managed infrastructure. Easiest path; you write nothing yourself. Pick this unless you have a specific reason not to. Hosted Mode runs `node server.js` and currently supports Node.js only. Hint has to enable hosting (custom apps) for the partner first; Step 1 checks this before anything is built.
    - **Self-hosted** — You already have (or will deploy) the app on your own infrastructure (Vercel, your AWS account, a VM, wherever). The skill only registers your URLs with Hint and confirms the marketplace contract. Any stack works.
 
 The mode the user picks determines which path the skill follows after the shared setup. Hold onto the answer — you'll branch on it after Step 2.
@@ -67,6 +67,13 @@ curl -s "$HINT_API_URL/api/partner/partner" \
 From the response, extract whichever of these are present (fresh sandbox partners may not have all of them populated):
 - `name` — partner name (often empty on a brand-new sandbox; the partner can set it later via `PATCH /partner/partner`)
 - `slug` — URL-safe identifier; may be absent on fresh sandboxes
+- `custom_apps_enabled` — whether Hint has enabled Hosted Mode for this partner
+
+**Hosted Mode requires `custom_apps_enabled: true`.** Hint support turns it on per partner; the partner can't, and in managed-hosted mode the practice can't either. While it's off, every Hosted deploy is rejected with "Custom apps are not enabled for this partner". Check it now, before generating any code:
+
+- **`true`** → continue.
+- **`false` or missing, and the user picked Self-hosted** → continue; the flag doesn't apply to apps the partner hosts themselves.
+- **`false` or missing, and the user picked Hosted (or came in via managed-hosted mode)** → stop here and don't build the app or suggest Hosted Mode. Tell the user that hosting isn't enabled for their account yet and that they can email [devsupport@hint.com](mailto:devsupport@hint.com) with the partner `id` (`ptr-...`) from the response above to request it. In regular partner mode, also offer Self-hosted as a way to keep going now. In managed-hosted mode there's no other path, so end the session once they have the next step. When support confirms, re-run this GET to see `custom_apps_enabled: true` before continuing.
 
 Then look up the partner's product — every app endpoint is scoped to a `product`, so you need its id before doing anything else:
 
@@ -199,16 +206,7 @@ To update config on an existing service later: `PATCH /api/partner/products/$PRO
 
 ## Step 5: Deploy
 
-> **Pre-deploy checklist (managed-hosted mode only).** In managed-hosted mode the `custom_apps_enabled` flag on the partner gates whether revisions / services / surfaces can be created at all. If it's off, the first revision POST below returns 403 / "Custom apps are not enabled for this partner". Verify the setting before deploying:
->
-> ```bash
-> curl -s "$HINT_API_URL/api/partner/partner" -H "Authorization: Bearer $API_KEY" \
->   | python3 -c "import sys,json; p=json.load(sys.stdin); print('custom_apps_enabled:', p.get('custom_apps_enabled'))"
-> ```
->
-> If it reports `False` / `None`, **only the Hint support team can enable it** — the flag is hinter-only (the practice owner cannot toggle it from any settings page, and the partner certainly can't either). Email [devsupport@hint.com](mailto:devsupport@hint.com) with the managed partner's ident (the `ptr-...` id from the verify step above) and ask them to enable custom apps. Once they confirm, re-run the verify GET to see the flag flip to `true`, then continue.
->
-> Regular-partner mode skips this check (the flag is irrelevant outside the managed-hosted flow).
+> **Hosted Mode must be enabled for the partner.** Step 1 checked `custom_apps_enabled`. If it's off, the revision POST below returns a 422 with "Custom apps are not enabled for this partner" and nothing is deployed; don't retry or rotate the API key, since neither changes it. Go back to Step 1's guidance and have the user contact [devsupport@hint.com](mailto:devsupport@hint.com).
 
 Zip the app and POST it as a revision. If no service exists yet, the first deploy auto-provisions one with default config.
 
@@ -253,7 +251,7 @@ Poll every 5 seconds. Cap at 5 minutes — if you don't see a 200 by then, treat
 
 Only escalate if 502s persist past ~2 minutes, or if you see a 4xx (which indicates a real error, e.g. handshake URL mismatched, missing env var crashing on boot).
 
-If the revision flips to `status: failed`, the platform refused the deploy (typical reasons: partner not yet approved for production deploys; partner product type is not `app`; push failure). Contact Hint support (devsupport@hint.com) with the revision id.
+If the revision flips to `status: failed`, the platform refused the deploy (typical reasons: Hosted Mode not enabled for the partner (`custom_apps_enabled: false`); partner not yet approved for production deploys; partner product type is not `app`; push failure). Contact Hint support (devsupport@hint.com) with the revision id.
 
 Save the live URL as `$APP_URL` and skip past Self-Hosted Mode to **Step 6: Configure Marketplace Settings**.
 
@@ -533,9 +531,10 @@ Response shape: `{ "url": "https://...", "expires_at": "<iso8601>" }`. Request a
 
 ## Troubleshooting
 
-- **(Hosted) Revision flips to `status: failed` immediately** — Contact Hint support (devsupport@hint.com) with the revision id. Common causes: partner is not approved for non-sandbox deploys yet, the partner has no eligible API key, or the partner's product type is not `app`.
+- **(Hosted) Revision flips to `status: failed` immediately** — Contact Hint support (devsupport@hint.com) with the revision id. Common causes: Hosted Mode isn't enabled for the partner (check `custom_apps_enabled` on `GET /api/partner/partner`), partner is not approved for non-sandbox deploys yet, the partner has no eligible API key, or the partner's product type is not `app`.
 - **(Hosted) Revision stays at `status: pushed` but `$APP_URL` never serves the new code** — The platform's build is in progress (typically 2-3 min). If it stays stuck past 10 min, contact Hint support with the revision's `commit_sha`.
 - **(Self-hosted) `$APP_URL` returns the wrong content / 404 on /hint/handshake** — The partner's app isn't actually serving the marketplace routes at the URL they gave. Have them double-check their deployment, then re-run the smoke-test curls from Self-Hosted Step 4.
+- **"Custom apps are not enabled for this partner"** — Hosted Mode isn't enabled for the partner (`custom_apps_enabled: false`). Only Hint support can turn it on: email [devsupport@hint.com](mailto:devsupport@hint.com) with the partner's `ptr-...` id. Retrying or creating a new API key won't help.
 - **"Product type must be app"** — The partner's product type must be `app`. Update it in the Partner Portal.
 - **403 on Partner API write endpoints** — Sandbox keys (`sbx-` prefix) can fully manage the marketplace plumbing (revisions, services, surfaces, app + partner settings) but **cannot create or modify business records** (e.g. `POST /api/partner/charges`, `POST /api/partner/practice_charges`). Those endpoints require a production-approved partner — contact [devsupport@hint.com](mailto:devsupport@hint.com) for promotion. If a sandbox key is hitting 403 on a non-business endpoint, the API key may not have the right permissions; double-check it's the partner's own key, not an integration key.
 - **428 "This action requires a Practice" on `/api/provider/*`** — You called a Provider endpoint with the partner-wide `HINT_API_KEY` instead of a practice-scoped access token. Provider endpoints can only be called on behalf of a specific practice — use the practice access token from `POST /api/partner/installations/connect` (`api_keys[0].token`, persisted during `/hint/connect/:code`). See [`_common/provider-api.md`](../_common/provider-api.md).
