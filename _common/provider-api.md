@@ -64,6 +64,18 @@ Use the MCP server (above) for the canonical list of available endpoints, parame
   - **`/practitioners`** — clinicians at the practice with credentialing identity: NPI, specialty, billing identity, signature-on-file, schedule-able. This is what shows up on encounters, what gets attributed in billing, what patients book with. Use this for "list doctors at this practice", "attribute revenue to a clinician", "render the visit-notes author dropdown".
   - The two overlap when a credentialed clinician also has a portal login — but a practitioner without a login is still a practitioner, and a staff user without credentials is not a practitioner. Don't conflate them.
 
+## Invoice charge categories
+
+`POST /api/provider/customer_invoices/:id/charges` and
+`PATCH /api/provider/customer_invoices/:id/charges/:id` accept
+`"category": { "type": "medications" }` as well as a practice-specific
+`"category": { "id": "cat-..." }`. Standard types match case-insensitively within
+that practice. Custom categories require an ID; an ID takes precedence if both
+are sent. An unknown ID returns 404 without falling back to type. The global
+`POST /api/provider/charges` uses the same category selection rules. Unknown types or types absent from the practice return 422. Existing
+invoice and reporting-period edit restrictions still apply. Use the API reference
+for the complete list of standard types.
+
 ## Response conventions
 
 Every Provider API client should follow the conventions in [`api-conventions.md`](./api-conventions.md): list endpoints return bare JSON arrays, pagination is `limit`/`offset`, date filters use bracketed operators (`?created_at[gte]=...`), and default scope differs per endpoint (patients hide archived; customer invoices include drafts and voided). Read that file first — getting the response shape wrong silently produces empty results.
