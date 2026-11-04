@@ -76,6 +76,15 @@ are sent. An unknown ID returns 404 without falling back to type. The global
 invoice and reporting-period edit restrictions still apply. Use the API reference
 for the complete list of standard types.
 
+## Sending customer invoices
+
+Issuing an invoice does not email the patient. Pick one:
+
+- **Hint emails it:** `POST /api/provider/customer_invoices/:id/send_email` sends Hint's invoice email to the invoice owner, and returns 422 when it can't (no email address, invalid address, previous bounce).
+- **Your app emails it:** after your own message goes out, `POST /api/provider/customer_invoices/:id/mark_as_sent` with `{ "sent_at": "2026-11-02T21:30:00Z" }` (ISO 8601 with a timezone, not in the future; omit for now). Hint sends nothing. An `issued` invoice becomes `sent`; `last_sent_at` keeps the latest send, so an older or equal `sent_at` returns 200 unchanged. Reuse the same `sent_at` when retrying the same message. Any status other than `issued` or `sent` returns 422.
+
+Don't call both for one delivery: Hint marks the invoice sent itself once it attempts the `send_email` delivery.
+
 ## Response conventions
 
 Every Provider API client should follow the conventions in [`api-conventions.md`](./api-conventions.md): list endpoints return bare JSON arrays, pagination is `limit`/`offset`, date filters use bracketed operators (`?created_at[gte]=...`), and default scope differs per endpoint (patients hide archived; customer invoices include drafts and voided). Read that file first — getting the response shape wrong silently produces empty results.
