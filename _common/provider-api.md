@@ -80,10 +80,10 @@ for the complete list of standard types.
 
 Issuing an invoice does not email the patient. Pick one:
 
-- **Hint emails it:** `POST /api/provider/customer_invoices/:id/send_email` sends Hint's invoice email to the invoice owner, and returns 422 when it can't (no email address, invalid address, previous bounce).
-- **Your app emails it:** after your own message goes out, `POST /api/provider/customer_invoices/:id/mark_as_sent` with `{ "sent_at": "2026-11-02T21:30:00Z" }` (ISO 8601 with a timezone, not in the future; omit for now). Hint sends nothing. An `issued` invoice becomes `sent`; `last_sent_at` keeps the latest send, so an older or equal `sent_at` returns 200 unchanged. Reuse the same `sent_at` when retrying the same message. Any status other than `issued` or `sent` returns 422.
+- **Hint emails it:** `POST /api/provider/customer_invoices/:id/send_email` sends Hint's invoice email to the invoice owner. It returns 422 when the email can't be sent, for example when the owner has no email address or a previous message bounced.
+- **Your app delivers it:** after your own email, text or other message goes out, `POST /api/provider/customer_invoices/:id/mark_as_sent` with `{ "sent_at": "2026-11-02T21:30:00Z" }` (ISO 8601 with a timezone, not in the future). Omit `sent_at` to record now; `null` returns 422. Hint sends nothing. An `issued` invoice becomes `sent`. `last_sent_at` keeps the latest send, so an older or equal `sent_at` returns 200 and leaves `last_sent_at` unchanged. Reuse the same `sent_at` when retrying the same message. Any status other than `issued` or `sent` returns 422.
 
-Don't call both for one delivery: Hint marks the invoice sent itself once it attempts the `send_email` delivery.
+Don't call both for one delivery. After `send_email`, Hint marks the invoice sent asynchronously, so the 200 response can still show `issued`.
 
 ## Response conventions
 
