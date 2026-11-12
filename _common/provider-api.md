@@ -64,6 +64,31 @@ Use the MCP server (above) for the canonical list of available endpoints, parame
   - **`/practitioners`** — clinicians at the practice with credentialing identity: NPI, specialty, billing identity, signature-on-file, schedule-able. This is what shows up on encounters, what gets attributed in billing, what patients book with. Use this for "list doctors at this practice", "attribute revenue to a clinician", "render the visit-notes author dropdown".
   - The two overlap when a credentialed clinician also has a portal login — but a practitioner without a login is still a practitioner, and a staff user without credentials is not a practitioner. Don't conflate them.
 
+## Restarting a cancelled membership
+
+Partners on public API version **2026-07-01 or later** can call
+`POST /api/provider/memberships/:id/restart` with a writable practice-scoped key.
+Older pinned versions receive 404; upgrade the partner's API version to use this action.
+Unpinned partners retain the API's existing newest-behavior convention.
+
+Restart restores the same membership; it does not create another enrollment or convert
+sponsored coverage to retail. Check `is_restartable` first. Sponsor and family eligibility
+rules still apply; a non-restartable membership returns 422 `Membership is not restartable`.
+An already restarted membership also returns 422, so do not blindly retry after an unknown outcome.
+Fetch the membership to reconcile its state first.
+
+Call this on the network's original sponsored membership using its practice-scoped key.
+An actual restart of an affiliate's synced copy returns 409 `Contact the network to change this membership`.
+A `check_price: true` preview of a synced copy returns 200 with that membership unchanged,
+matching the dashboard; it does not preview a restarted membership or change the copy.
+Restart clears cancellation reasons and eligibility end dates and restores affected members.
+It recalculates billing dates; do not assume cancellation/restart has no billing impact.
+
+An empty JSON object uses the existing billing schedule. Optional `next_bill_date` (`YYYY-MM-DD`)
+overrides the billing date. Optional `check_price: true` returns a public membership preview and
+rolls back the changes; omit it for an actual restart. Both actual and preview requests return
+the public membership object.
+
 ## Invoice charge categories
 
 `POST /api/provider/customer_invoices/:id/charges` and
