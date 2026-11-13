@@ -84,25 +84,13 @@ linked to an account-only billing customer before conversion.
   an existing account-only customer belonging to the prospect is promoted in place.
   Unknown/foreign prospects return 404; converted prospects and invalid patient
   data return 422 without creating a patient or converting the prospect.
-- **Existing patient:** `POST /api/provider/prospect_merges` with
-  `{ from_id: 'pros-...', to_id: 'pat-...', preview: true }`. Preview defaults to
-  true and changes nothing. Read `result.attributes` for conflicting `key`,
-  `field`, `from_value` (prospect), and `to_value` (patient), and
-  `result.associations` for notes/phone migration details.
-- **Commit a merge:** send the same IDs with `preview: false` and
-  `attributes: ['first_name', 'address']`. Those keys take the prospect's values;
-  all unselected patient values stay. Allowed keys: `first_name`, `last_name`,
-  `email`, `dob`, `practitioner`, `location`, `address`. Omitted/empty attributes
-  keep patient values; blank prospect values never overwrite them. The patient
-  keeps its ID, notes move, additional phone numbers are copied, and preferred
-  plan is not merged. Both records must be in this practice; the target must be
-  an unarchived patient. Malformed merge controls or converted prospects return
-  400; unknown/foreign/unavailable records return 404. Read-only keys cannot merge.
+- **Existing patient:** prospect-to-existing-patient merge is internal to Hint's
+  staff workflow. Do not call or recommend an internal merge route. Follow the
+  retained prospect's status and patient link when staff merge it in Hint.
 
 Conversion retains the prospect with the same ID, sets `converted`, and emits
 `prospect.updated`. Use the returned `patient.id` to read the chosen patient
-values. The public merge response includes `result`, the retained `prospect`,
-and a minimal `patient` reference. Converted prospects are read-only and cannot
+values. Converted prospects are read-only and cannot
 be deleted through CRUD; do not try to close a lead by PATCHing `converted`.
 
 **Polling must query conversions explicitly.** The default prospect list hides
@@ -116,7 +104,7 @@ Independently creating a patient does not guarantee that a matching prospect
 is linked or converted.
 
 Prospects remains in beta. Verify endpoint availability through the API reference
-or MCP before using conversion/merge and lead-source writeback, and do not fall
+or MCP before using API conversion and lead-source writeback, and do not fall
 back to an internal route if a requested public operation is unavailable.
 
 ## Restarting a cancelled membership
