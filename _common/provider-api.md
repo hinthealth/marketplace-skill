@@ -186,9 +186,9 @@ Both return the same element shape (`download_urls` a bare array of them, `downl
 
 **`type` is `null` for most files.** Send every attachment in `files`. Hint stores it and reports `type` as `null`. Lab interactions add two fields. A partner sends the lab's paperwork in `requisition_files` and its report in `result_files`. Those entries come back typed `lab_requisition` and `lab_result`. `type` changes nothing about downloads.
 
-**URLs are PDF-only.** Only files that resolve to `application/pdf` get a signed `url`. On `download_urls` a non-PDF stays in the array with `url: null` and `expires_at: null` (so you can tell "not downloadable" from "not returned"). On `download_url` a non-PDF is a `422`, and an `id` that isn't on that interaction is a `404`.
+**Only some types get a URL.** A file gets a signed `url` when it is one of these types: images (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.bmp`, `.tif`, `.tiff`, `.heic`, `.heif`) and documents (`.pdf`, `.docx`, `.xlsx`, `.pptx`, `.txt`, `.csv`, `.odt`, `.ods`, `.odp`). Everything else is not downloadable. On `download_urls` an ineligible file stays in the array with `url: null` and `expires_at: null` (so you can tell "not downloadable" from "not returned"). On `download_url` it is a `422`, and an `id` that isn't on that interaction is a `404`.
 
-**URLs are short-lived — sign at download time.** `expires_at` is about 5 minutes out and the link is meant to be used once, not saved. Call the endpoint when the user actually clicks download, then redirect to (or fetch) the returned `url` — do not cache it, store it in your DB, or precompute it during a sync.
+**URLs are short-lived — sign at download time.** The link expires shortly after it is issued; `expires_at` carries the exact time. Call the endpoint when the user actually clicks download, then redirect to (or fetch) the returned `url` — do not cache it, store it in your DB, or precompute it during a sync.
 
 This is the mechanism behind the labs-PDF rule above: to show a patient a lab's PDF report, take that file's `id` from the interaction's `files` array and fetch its `download_url`.
 
