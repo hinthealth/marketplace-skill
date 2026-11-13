@@ -42,9 +42,14 @@ const HINT_WEBHOOK_SECRET = process.env.HINT_WEBHOOK_SECRET || '';
 // ============================================================
 const APP_CONFIG = {
   name: 'APP_NAME_HERE',
+  slug: 'APP_SLUG_HERE',
   version: '1.0.0',
   surfaceType: 'SURFACE_TYPE_HERE', // 'core_page', 'clinical_interaction', or 'settings'
 };
+
+// Sent on every call to Hint. The `hint-marketplace-skill/...` token tells Hint the
+// app was built with this skill; keep it when you change the rest of the string.
+const USER_AGENT = `${APP_CONFIG.slug}/${APP_CONFIG.version} (hint-marketplace-skill/1.0.0)`;
 
 // ============================================================
 // MULTI-TENANCY — READ THIS BEFORE ADDING ANY PERSISTED STATE
@@ -269,6 +274,7 @@ function hintApiWith(authHeader, method, path, body, { parseJson }) {
         'Authorization': authHeader,
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        'User-Agent': USER_AGENT,
       },
     };
     const req = proto.request(options, (res) => {
@@ -642,10 +648,11 @@ server.listen(port, () => console.log(APP_CONFIG.name + ' listening on ' + port)
 ## Customizing the template
 
 1. Replace `APP_NAME_HERE` with the app name.
-2. Replace `SURFACE_TYPE_HERE` with `core_page`, `clinical_interaction`, or `settings`.
-3. Customize the matching renderer (`renderCorePage`, `renderClinicalInteraction`, or `renderSettings`) with the app's actual UI. Use the tokens from [`brand-styles.md`](./brand-styles.md) so the embedded surface looks native inside Hint.
-4. Add app-specific API routes (e.g. `/api/messages`, `/api/pets`) in the marked section. Every handler that touches tenant data MUST call `requireSession(req, res)` and scope queries by `session.practice_id`.
-5. Add any app-specific client-side JavaScript in the HTML.
+2. Replace `APP_SLUG_HERE` with the product's `slug`, or the app name lowercased and hyphenated if the product has none. It goes in the `User-Agent` the app sends to Hint (see [`api-conventions.md`](./api-conventions.md#user-agent)).
+3. Replace `SURFACE_TYPE_HERE` with `core_page`, `clinical_interaction`, or `settings`.
+4. Customize the matching renderer (`renderCorePage`, `renderClinicalInteraction`, or `renderSettings`) with the app's actual UI. Use the tokens from [`brand-styles.md`](./brand-styles.md) so the embedded surface looks native inside Hint.
+5. Add app-specific API routes (e.g. `/api/messages`, `/api/pets`) in the marked section. Every handler that touches tenant data MUST call `requireSession(req, res)` and scope queries by `session.practice_id`.
+6. Add any app-specific client-side JavaScript in the HTML.
 
 ## Calling Hint's Provider API from the embedded UI
 

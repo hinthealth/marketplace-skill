@@ -141,6 +141,8 @@ For each missing route or env var hook, generate a code snippet in the partner's
 
 For Node.js (Express/Fastify/plain), Python (Flask/FastAPI), Ruby (Rails/Sinatra), Go (net/http/chi), PHP, Rust, etc., the pattern is the same — only the syntax differs. Use the canonical Node.js implementation at [`_common/node-template.md`](../_common/node-template.md) as the reference; port the logic, not the file structure.
 
+Wherever the app builds its Hint API client, set the `User-Agent` described in [`_common/api-conventions.md`](../_common/api-conventions.md#user-agent) so every call to Hint carries it.
+
 ### Snippet 1: `POST /hint/handshake` (signature-verified)
 
 The handler must:

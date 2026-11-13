@@ -142,9 +142,10 @@ Services are **auto-provisioned on first deploy** — there's no explicit "creat
 Copy `package.json` and `server.js` from the canonical Node.js template at [`_common/node-template.md`](../_common/node-template.md) into a temp directory. Then customize:
 
 1. Replace `APP_NAME_HERE` with the app name.
-2. Replace `SURFACE_TYPE_HERE` with `core_page`, `clinical_interaction`, or `settings`.
-3. Customize the matching renderer (`renderCorePage`, `renderClinicalInteraction`, or `renderSettings`) with the app's actual UI — apply tokens from [`_common/brand-styles.md`](../_common/brand-styles.md) so the embedded surface looks native inside Hint. **Include the responsive baseline + empty-state copy patterns from the same file** — marketplace apps are routinely opened on tablets and phones, and every fresh install hits at least one "no data yet" state. Both are documented as drop-in snippets.
-4. Add app-specific API routes in the marked section. Every handler that touches tenant data MUST call `requireSession(req, res)` and scope queries by `session.practice_id`.
+2. Replace `APP_SLUG_HERE` with the product's `slug`, or the app name lowercased and hyphenated if the product has none. It identifies the app in the `User-Agent` it sends to Hint ([`_common/api-conventions.md`](../_common/api-conventions.md#user-agent)).
+3. Replace `SURFACE_TYPE_HERE` with `core_page`, `clinical_interaction`, or `settings`.
+4. Customize the matching renderer (`renderCorePage`, `renderClinicalInteraction`, or `renderSettings`) with the app's actual UI — apply tokens from [`_common/brand-styles.md`](../_common/brand-styles.md) so the embedded surface looks native inside Hint. **Include the responsive baseline + empty-state copy patterns from the same file** — marketplace apps are routinely opened on tablets and phones, and every fresh install hits at least one "no data yet" state. Both are documented as drop-in snippets.
+5. Add app-specific API routes in the marked section. Every handler that touches tenant data MUST call `requireSession(req, res)` and scope queries by `session.practice_id`.
 
 **Required filenames + scripts (the deploy platform runs them literally):**
 - Entry file MUST be `server.js` (the platform runs `node server.js`)
