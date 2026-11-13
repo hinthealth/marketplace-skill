@@ -53,7 +53,7 @@ The `_common/` folder holds cross-cutting conventions and reusable assets so ind
 
 ## Versioning
 
-The repo follows semver via git tags (e.g. `v1.0.0`). Major bumps mean a breaking change to the marketplace contract. Individual `SKILL.md` files don't carry per-skill versions today — they ship together as one repo release.
+The repo follows semver via git tags (e.g. `v1.0.0`). Major bumps mean a breaking change to the marketplace contract. Individual `SKILL.md` files don't carry per-skill versions today — they ship together as one repo release. The `hint-marketplace-skill/<version>` token in the generated apps' `User-Agent` ([`_common/api-conventions.md`](_common/api-conventions.md#user-agent)) carries the release version; update it when you tag a release.
 
 ## Issues
 

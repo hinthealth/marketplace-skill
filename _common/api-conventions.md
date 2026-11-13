@@ -25,6 +25,16 @@ Two distinct token types:
 
 Never use the partner API key for `/api/provider/*` calls — those need the practice-scoped token or they leak cross-practice data.
 
+## User-Agent
+
+An app built or retrofitted with this skill sends this `User-Agent` on every call it makes to the Hint API:
+
+```
+User-Agent: <app-slug>/<app-version> (hint-marketplace-skill/1.0.0)
+```
+
+`<app-slug>` is the product's `slug` (or the app name, lowercased and hyphenated, if the product has none) and `<app-version>` is the app's own version. Keep the `hint-marketplace-skill/1.0.0` token exactly as written: Hint uses it to tell integrations built with this skill apart from other API clients. Set the header once, in the app's Hint API client, so every call carries it. The Node template does this in `hintApiWith`. HTTP libraries send their own default `User-Agent` (`axios/1.7.2`, `node`, `python-requests/2.32`) unless you replace it.
+
 ## List-endpoint response shape
 
 `GET /api/partner/*` and `GET /api/provider/*` list endpoints return **bare JSON arrays**, not `{patients: [...]}` or `{data: [...]}`. Parse with `Array.isArray(res) ? res : []` and iterate directly. Do NOT do `res.patients || res.records || []` — that silently produces an empty array.
