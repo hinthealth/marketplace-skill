@@ -86,6 +86,8 @@ const USER_AGENT = `${APP_CONFIG.slug}/${APP_CONFIG.version} (hint-marketplace-s
 //
 // Hosted Mode auto-provisions a sibling Postgres and sets DATABASE_URL.
 // For Self-Hosted apps, set DATABASE_URL yourself (any Postgres works).
+// Use the URL as-is; don't add sslmode. To encrypt the connection, see
+// _common/api-conventions.md, "DATABASE_URL and TLS".
 //
 // For app-specific tenant data, add tables with a non-null practice_id:
 //
