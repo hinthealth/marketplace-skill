@@ -85,7 +85,17 @@ Hint sets these automatically on every Hosted-Mode deploy. Self-Hosted Mode apps
 | `HINT_PARTNER_ID` | Stable partner ident (e.g. `ptr-...` / `sbx-ptr-...`). Useful for log scoping. |
 | `HINT_PRODUCT_ID` | Stable ident (e.g. `ppro-...`) of **this app's own product**. A backend's Postgres is shared by every app whose product is on that backend; key per-product data (e.g. the practice access-token store) by this value to record which products a practice installed. (The token itself is the same across a practice's products on one backend — they share one integration — so this is for tracking, not credential isolation.) |
 | `HINT_WEBHOOK_SECRET` | Used to verify the `X-Hint-Signature` header on `POST /hint/handshake`. The partner finds this in the Partner Portal under **Webhook Settings → Webhooks Signature Key** (the key belongs to the selected backend; most partners have one). |
-| `DATABASE_URL` | Postgres connection string (only present when the auto-provisioned sibling database is connectable). |
+| `DATABASE_URL` | Postgres connection string (only present when the auto-provisioned sibling database is connectable). See [`DATABASE_URL` and TLS](#database_url-and-tls). |
+
+### `DATABASE_URL` and TLS
+
+On Hosted Mode, `DATABASE_URL` points at the sibling database over a private network: an internal host, no port, no `sslmode`. The database has no public access, so only services in Hint's hosting environment can reach it.
+
+- **Default:** use the URL as-is. The connection is unencrypted on the private network, which is acceptable.
+- **To encrypt anyway:** pass `ssl: { rejectUnauthorized: false }` to the client, e.g. `new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })`. The server's certificate is self-signed and cannot be verified, so this encrypts without authenticating the server; the private network is what protects the connection. This setting on the database client is expected, not a vulnerability.
+- **Do not add `sslmode` to the URL.** node-postgres treats `sslmode=require` (and `verify-full`) as full verification, which fails on the self-signed certificate, and URL parameters override the client's `ssl` option. `sslmode=no-verify` works only in node-postgres and breaks libpq-based clients (psql, Ruby `pg`, psycopg).
+
+Self-Hosted Mode apps bring their own database and follow their provider's TLS guidance.
 
 ## Webhook event subscriptions
 
