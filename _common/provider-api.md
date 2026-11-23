@@ -64,6 +64,49 @@ Use the MCP server (above) for the canonical list of available endpoints, parame
   - **`/practitioners`** — clinicians at the practice with credentialing identity: NPI, specialty, billing identity, signature-on-file, schedule-able. This is what shows up on encounters, what gets attributed in billing, what patients book with. Use this for "list doctors at this practice", "attribute revenue to a clinician", "render the visit-notes author dropdown".
   - The two overlap when a credentialed clinician also has a portal login — but a practitioner without a login is still a practitioner, and a staff user without credentials is not a practitioner. Don't conflate them.
 
+## Prospects and conversion
+
+Use the practice-scoped access token for prospect CRUD at `/api/provider/prospects`
+and `/api/provider/prospects/:id`. At least one email or phone must remain present.
+Create is not an upsert: normalized email is unique across undeleted prospects,
+including retained converted prospects. `lead_source: { id: "..." }` and
+`lead_source_other` are writable; optional attribution can be cleared with `null`.
+Unknown or other-practice lead sources return 404.
+
+The five statuses are `new`, `contacted`, `qualified`, `disqualified`, and
+`converted`. Only the first four are writable. **Use `status === 'converted'`
+as the conversion signal**, not a non-null `patient` link: a prospect can be
+linked to an account-only billing customer before conversion.
+
+- **New patient:** `POST /api/provider/patients` with
+  `{ ...requiredPatientFields, source_prospect_id: 'pros-...' }`.
+  `source_prospect_id` is top-level. Conversion is atomic with patient creation;
+  an existing account-only customer belonging to the prospect is promoted in place.
+  Unknown/foreign prospects return 404; converted prospects and invalid patient
+  data return 422 without creating a patient or converting the prospect.
+- **Existing patient:** prospect-to-existing-patient merge is internal to Hint's
+  staff workflow. Do not call or recommend an internal merge route. Follow the
+  retained prospect's status and patient link when staff merge it in Hint.
+
+Conversion retains the prospect with the same ID, sets `converted`, and emits
+`prospect.updated`. Use the returned `patient.id` to read the chosen patient
+values. Converted prospects are read-only and cannot
+be deleted through CRUD; do not try to close a lead by PATCHing `converted`.
+
+**Polling must query conversions explicitly.** The default prospect list hides
+converted records even with `updated_at` or `q`. Page both the default query and
+`?status=converted` using the same updated-at window. Lists are flat arrays.
+Handle `prospect.created`, `prospect.updated`, and `prospect.destroyed`; there is
+no `prospect.converted` event or polling deletion feed. De-duplicate events,
+refresh current records, and reconcile periodically. Separately honor
+`email_marketing_authorization`; shared email within a practice shares consent.
+Independently creating a patient does not guarantee that a matching prospect
+is linked or converted.
+
+Prospects remains in beta. Verify endpoint availability through the API reference
+or MCP before using API conversion and lead-source writeback, and do not fall
+back to an internal route if a requested public operation is unavailable.
+
 ## Restarting a cancelled membership
 
 Partners on public API version **2026-07-01 or later** can call
