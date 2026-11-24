@@ -32,7 +32,7 @@ fetch('/hint/api/provider/patients?limit=10', {
 }).then(r => r.json());
 ```
 
-The proxy looks up `session.access_token` from the session row (Postgres-backed in the template), forwards the call to Hint with `Authorization: Bearer <access_token>`, and pipes the response back. Query strings, request bodies, and HTTP methods all pass through unchanged.
+The proxy looks up `session.access_token`, the practice access token from `/hint/connect/:code` that the template joins onto the session (never the handshake's `access_token`), forwards the call to Hint with `Authorization: Bearer <access_token>`, and pipes the response back. Query strings, request bodies, and HTTP methods all pass through unchanged.
 
 A `503 "Practice has not completed headless connect yet"` means the session exists but the access_token hasn't landed yet — the connect callback is still in flight. Retry once after a couple of seconds.
 

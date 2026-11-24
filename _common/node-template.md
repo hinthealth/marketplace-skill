@@ -254,9 +254,10 @@ function hintApi(method, path, body) {
 }
 
 // Practice-scoped calls — uses the per-practice access_token from the
-// /hint/connect/:code exchange (installations/connect). Use this for any
-// /api/provider/* call; the access_token lives on the session row (see
-// requireSession).
+// /hint/connect/:code exchange (installations/connect), stored in
+// practice_tokens. getSession joins it onto the session as access_token; it
+// is not the handshake's access_token, which this template does not store.
+// Never write a handshake token into practice_tokens.
 function hintApiAs(accessToken, method, path, body) {
   return hintApiWith(`Bearer ${accessToken}`, method, path, body, { parseJson: false });
 }
@@ -405,15 +406,15 @@ const server = http.createServer(async (req, res) => {
   // ============================================================
   // PROVIDER API PROXY — /hint/api/provider/*
   //
-  // Forwards browser-side calls to Hint's /api/provider/* with the practice's
-  // session access_token attached server-side. Client code NEVER sees the
+  // Forwards browser-side calls to Hint's /api/provider/* with the practice
+  // access token attached server-side. Client code NEVER sees the
   // access_token — fetch('/hint/api/provider/patients') from the embedded UI
   // is the right pattern; fetch('https://api.hint.com/api/provider/patients')
   // (direct, unauthed) is wrong and will 401.
   //
   // The client just needs to send the session_key (in the x-hint-session-key
-  // header or as a ?session_key=... query param) so this server can look up
-  // the access_token on the session row.
+  // header or as a ?session_key=... query param) so this server can find the
+  // session's practice and its access token.
   // ============================================================
   if (url.pathname.startsWith('/hint/api/provider/')) {
     const session = await requireSession(req, res); if (!session) return;
@@ -677,7 +678,7 @@ async function fetchPatientsBroken() {
 
 **One path is deliberately blocked**: `GET /api/provider/installations/<slug>/credential` returns another partner's secret, and this proxy would hand it straight to the browser. The handler refuses it with a `403`. Fetch that one server-side and return only the partner's response to your UI — full rules in [`partner-credentials.md`](./partner-credentials.md). Discovery (`GET /api/provider/partner_credentials`) carries no secret and passes through the proxy normally.
 
-Why: the `access_token` for `/api/provider/*` is **practice-scoped** and lives on the session row (Postgres). The browser never has it (and shouldn't — exposing it would let any page on the embed origin act as the practice). The proxy looks the token up from `session.access_token` server-side, forwards the upstream call with `Authorization: Bearer <access_token>`, and returns the response. Path mapping is straight: `/hint/api/provider/X` → `https://api.hint.com/api/provider/X`. Query strings, request bodies, and HTTP methods all pass through unchanged.
+Why: the `access_token` for `/api/provider/*` is the **practice access token** from `/hint/connect/:code`, stored in `practice_tokens` (Postgres) and joined onto the session by `getSession`. It is not the handshake's `access_token`; see [Keep the two tokens apart](./marketplace-contract.md#use-the-handshakes-access_token-to-call-the-provider-api). The browser never has it (and shouldn't — exposing it would let any page on the embed origin act as the practice). The proxy looks the token up from `session.access_token` server-side, forwards the upstream call with `Authorization: Bearer <access_token>`, and returns the response. Path mapping is straight: `/hint/api/provider/X` → `https://api.hint.com/api/provider/X`. Query strings, request bodies, and HTTP methods all pass through unchanged.
 
 When the proxy returns **`503 "Practice has not completed headless connect yet"`**, it means the session row exists but the access_token hasn't landed yet — the connect callback is still in flight. Retry once after a couple of seconds.
 

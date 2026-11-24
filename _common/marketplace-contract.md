@@ -94,7 +94,9 @@ This is preferable to the longer-lived practice access token (obtained via `POST
 - Its lifetime is the embed session, not the practice's lifetime — leaks die quickly.
 - It carries the acting user's identity, so server-side audit logs attribute correctly.
 
-Use the practice access token (the one stored under `practice_id` after `/hint/connect/:code`) only for **server-to-server work that happens outside an embed session** — webhooks, scheduled jobs, async fanout to other practices. For "the embedded surface is open and needs to read /provider/patients", the handshake token is the right tool.
+Use the practice access token (the one stored under `practice_id` after `/hint/connect/:code`) only for **server-to-server work that happens outside an embed session**: webhooks, scheduled jobs and other background work for that practice. For "the embedded surface is open and needs to read /provider/patients", the handshake token is the right tool.
+
+**Keep the two tokens apart.** The handshake token belongs to the session it arrived with: store it on that session, if anywhere. Never write it to the practice access token's storage, and never use it for background work. It expires with the embed session and acts as the user who opened it, so a stored copy makes later calls run as whichever user opened the app last, and fail once that session ends. Only `/hint/connect/:code` writes the practice access token.
 
 ## Signature verification
 
