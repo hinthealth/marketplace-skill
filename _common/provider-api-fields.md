@@ -72,7 +72,7 @@ amount_in_cents, total_in_cents, subtotal_in_cents, tax_in_cents,
 paid_in_cents, received_in_cents, due_in_cents,   // ← revenue lives here
 payment_status, payments_count,
 charges_count,
-charges: [ { ... } ],                    // line items — see below
+charges: [ { ... } ],                    // line items — see below; price_defaulted: true = nobody set the price
 owner: { id, name, ... }                 // the patient billed
 ```
 
@@ -111,7 +111,7 @@ specialties: [ { id, name } ]
 
 ## What's NOT here
 
-- **`/provider/charges`** — does not exist. Charges are nested under invoices (`customer_invoices.charges` inline, or `/customer_invoices/:id/charges`).
+- **`GET /provider/charges`** — does not exist (`POST` does, to create a charge). Read charges inline on `customer_invoices` (`expand=charges`); `/customer_invoices/:id/charges` only takes writes.
 - **`/provider/invoices`** — does not exist. Use `customer_invoices` (patient bills) or `practice_invoices` (Hint bills the practice).
 - **`engagement_status`** — exists in Hint's UI, not on the Provider API. Partner apps cannot exactly reproduce Hint's "Active Members" UI count; expect a 3–5% gap.
 

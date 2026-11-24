@@ -57,7 +57,7 @@ cross-partner code.
 
 Use the MCP server (above) for the canonical list of available endpoints, parameters, and response schemas. A few gotchas worth knowing up-front:
 
-- **There is no `GET /api/provider/charges`** as a top-level resource. Charges are nested under invoices: `GET /api/provider/customer_invoices/:id/charges`, or inline them via `GET /api/provider/customer_invoices?expand=charges`. A bare `/charges` returns 404.
+- **There is no `GET /api/provider/charges`** as a top-level resource. Read charges inline via `GET /api/provider/customer_invoices?expand=charges`; `/customer_invoices/:id/charges` only takes writes. A bare `/charges` returns 404.
 - **There is no `GET /api/provider/invoices`** — partners usually want `customer_invoices` (patient-facing invoices), or `practice_invoices` (what the practice owes Hint).
 - **`/api/provider/users` and `/api/provider/practitioners` are NOT the same list.** They overlap but model different concepts and carry different fields, so picking the wrong one means the app silently has the wrong data even when the endpoint returns rows. Pick by what the app actually needs:
   - **`/users`** — staff accounts that can log into the Hint dashboard for the practice (admins, billing staff, schedulers, clinicians who happen to log in). Useful when the app needs "who has portal access" or "list users for an in-app permission picker". `/users` often returns `[]` in fresh sandboxes simply because no one has signed up yet — that's not the only reason to prefer `/practitioners`.
@@ -143,6 +143,20 @@ are sent. An unknown ID returns 404 without falling back to type. The global
 `POST /api/provider/charges` uses the same category selection rules. Unknown types or types absent from the practice return 422. Existing
 invoice and reporting-period edit restrictions still apply. Use the API reference
 for the complete list of standard types.
+
+## Charges created without a price
+
+`price_in_cents` is optional on `POST /api/provider/charges`. When omitted, Hint uses
+the charge item's price, or 0 if it has none. If no charge item visible to the practice
+matched, the charge comes back with `price_defaulted: true`: nobody chose that price.
+Sending a price, including an explicit 0, always gives `false`, so send
+`"price_in_cents": 0` for a free service.
+
+To clear it, `PATCH /api/provider/customer_invoices/:id/charges/:id` with
+`price_in_cents` (0 included) while the invoice is `draft`. It only clears when the
+price is applied: a price ignored on an issued invoice, a discounted charge, or a
+package or prepaid item leaves `price_defaulted` as it was. A charge on a sponsor
+invoice can only be repriced by the practice in Hint. Clients cannot set `price_defaulted` directly.
 
 ## Sending customer invoices
 
