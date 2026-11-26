@@ -73,10 +73,12 @@ including retained converted prospects. `lead_source: { id: "..." }` and
 `lead_source_other` are writable; optional attribution can be cleared with `null`.
 Unknown or other-practice lead sources return 404.
 
-The five statuses are `new`, `contacted`, `qualified`, `disqualified`, and
-`converted`. Only the first four are writable. **Use `status === 'converted'`
-as the conversion signal**, not a non-null `patient` link: a prospect can be
-linked to an account-only billing customer before conversion.
+The seven statuses are `new`, `contacted`, `waitlisted`, `meet_and_greet`,
+`qualified`, `disqualified`, and `converted`. All but `converted` are writable;
+practices see `waitlisted` as "Waitlist" and `meet_and_greet` as "Meet & Greet".
+**Use `status === 'converted'` as the conversion signal**, not a non-null
+`patient` link: a prospect can be linked to an account-only billing customer
+before conversion.
 
 - **New patient:** `POST /api/provider/patients` with
   `{ ...requiredPatientFields, source_prospect_id: 'pros-...' }`.
