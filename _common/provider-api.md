@@ -160,6 +160,13 @@ price is applied: a price ignored on an issued invoice, a discounted charge, or 
 package or prepaid item leaves `price_defaulted` as it was. A charge on a sponsor
 invoice can only be repriced by the practice in Hint. Clients cannot set `price_defaulted` directly.
 
+Practices can have issuing blocked while an invoice holds a defaulted charge. Then
+`POST /api/provider/customer_invoices/:id/issue` returns 400 with `code: "bad_request"`
+and a `message` that names the charges, and the invoice stays `draft`. Show that
+`message` to the user as is and let them set the price; do not retry the issue
+unchanged. Before issuing, check `expand=charges` for `price_defaulted: true` if you
+want to catch it up front.
+
 ## Sending customer invoices
 
 Issuing an invoice does not email the patient. Pick one:

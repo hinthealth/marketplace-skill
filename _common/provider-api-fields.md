@@ -72,7 +72,7 @@ amount_in_cents, total_in_cents, subtotal_in_cents, tax_in_cents,
 paid_in_cents, received_in_cents, due_in_cents,   // ← revenue lives here
 payment_status, payments_count,
 charges_count,
-charges: [ { ... } ],                    // line items — see below; price_defaulted: true = nobody set the price
+charges: [ { ... } ],                    // line items — see below; price_defaulted: true = nobody set the price (can block issuing)
 owner: { id, name, ... }                 // the patient billed
 ```
 
