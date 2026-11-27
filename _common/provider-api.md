@@ -162,10 +162,10 @@ invoice can only be repriced by the practice in Hint. Clients cannot set `price_
 
 Practices can have issuing blocked while an invoice holds a defaulted charge. Then
 `POST /api/provider/customer_invoices/:id/issue` returns 400 with `code: "bad_request"`
-and a `message` that names the charges, and the invoice stays `draft`. Show that
-`message` to the user as is and let them set the price; do not retry the issue
-unchanged. Before issuing, check `expand=charges` for `price_defaulted: true` if you
-want to catch it up front.
+and a `message` that does not name the charges, and the invoice stays `draft`. Find
+them with `expand=charges` and `price_defaulted: true`, let the user set their price,
+then issue again; do not retry the issue unchanged. Check the same field before
+issuing if you want to catch it up front.
 
 ## Sending customer invoices
 
